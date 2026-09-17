@@ -4,6 +4,11 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.pdf_parser import PDFExtractionError, extract_pages
+from app.rag_assistant import (
+    RagAssistantFailed,
+    RagAssistantUnavailable,
+    answer_rag_question,
+)
 from app.result_assistant import (
     ResultAssistantFailed,
     ResultAssistantUnavailable,
@@ -15,6 +20,8 @@ from app.schemas import (
     ReportAnswer,
     ReportExtractionResponse,
     ReportQuestionRequest,
+    RagAnswer,
+    RagQuestionRequest,
     ResultAnswer,
     ResultQuestionRequest,
     StructuredReport,
@@ -150,6 +157,27 @@ async def ask_about_report(request: ReportQuestionRequest) -> ReportAnswer:
             detail=str(error),
         ) from error
     except ResultAssistantFailed as error:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(error),
+        ) from error
+
+
+@app.post("/api/rag/ask", response_model=RagAnswer)
+async def ask_rag_assistant(request: RagQuestionRequest) -> RagAnswer:
+    if any(result.review_status != "confirmed" for result in request.results):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only confirmed results can be discussed.",
+        )
+    try:
+        return await answer_rag_question(request)
+    except RagAssistantUnavailable as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(error),
+        ) from error
+    except RagAssistantFailed as error:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(error),

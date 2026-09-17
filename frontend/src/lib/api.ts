@@ -1,4 +1,4 @@
-import type { ChatMessage, LabResult, Language, ReportAnswer, ReportExtraction, ResultAnswer, StructuredReport } from "@/types/report";
+import type { ChatMessage, LabResult, Language, RagAnswer, ReportAnswer, ReportExtraction, ResultAnswer, StructuredReport } from "@/types/report";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -77,4 +77,19 @@ export async function translateTexts(texts: string[], language: Language): Promi
   if (!response.ok) throw new Error("Translation is temporarily unavailable.");
   const payload = await response.json() as { texts: string[] };
   return payload.texts;
+}
+
+export async function askRagAssistant(results: LabResult[], question: string, history: ChatMessage[], language: Language): Promise<RagAnswer> {
+  const response = await fetch(`${API_URL}/api/rag/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ results, question, history: history.slice(-8), language }),
+  });
+
+  if (!response.ok) {
+    const error = (await response.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(error?.detail ?? "The detailed report assistant could not answer right now.");
+  }
+
+  return response.json() as Promise<RagAnswer>;
 }
