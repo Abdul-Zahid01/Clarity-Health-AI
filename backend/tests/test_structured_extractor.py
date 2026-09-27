@@ -53,11 +53,24 @@ def test_source_evidence_accepts_whitespace_variation() -> None:
     )
 
 
-def test_source_evidence_rejects_wrong_page() -> None:
-    with pytest.raises(StructuredExtractionFailed, match="not found on page 2"):
+def test_source_evidence_corrects_unique_wrong_page() -> None:
+    draft = create_draft(2, "Glucose 92")
+    validate_source_evidence(
+        draft,
+        [ExtractedPage(page_number=1, text="Glucose 92 70 - 99 mg/dL"), ExtractedPage(page_number=2, text="Other test")],
+    )
+
+    assert draft.results[0].source_page == 1
+
+
+def test_source_evidence_rejects_ambiguous_page() -> None:
+    with pytest.raises(StructuredExtractionFailed, match="matched multiple pages"):
         validate_source_evidence(
-            create_draft(2, "Glucose 92"),
-            [ExtractedPage(page_number=1, text="Glucose 92")],
+            create_draft(3, "Glucose 92"),
+            [
+                ExtractedPage(page_number=1, text="Glucose 92 70 - 99 mg/dL"),
+                ExtractedPage(page_number=2, text="Glucose 92 70 - 99 mg/dL"),
+            ],
         )
 
 
@@ -67,6 +80,42 @@ def test_source_evidence_rejects_fabricated_excerpt() -> None:
             create_draft(1, "Glucose 192"),
             [ExtractedPage(page_number=1, text="Glucose 92")],
         )
+
+
+def test_source_evidence_prefers_selected_page_and_ignores_related_test_name() -> None:
+    draft = StructuredReportDraft(
+        patient=PatientMetadataDraft(age_years=None, sex=None),
+        results=[
+            LabResultDraft(
+                category="Biochemistry",
+                name="BUN",
+                value_numeric=15,
+                value_text=None,
+                unit="mg/dL",
+                reference_min=8.87,
+                reference_max=20.50,
+                reported_flag=None,
+                source_page=1,
+                source_text="BUN 15.00 mg/dL",
+            )
+        ],
+    )
+
+    validate_source_evidence(
+        draft,
+        [
+            ExtractedPage(
+                page_number=1,
+                text="Blood Urea Nitrogen (BUN)\n15.00\n8.87 - 20.50 mg/dL",
+            ),
+            ExtractedPage(
+                page_number=2,
+                text="BUN Creatinine Ratio\n15.00\n8.87 - 20.50",
+            ),
+        ],
+    )
+
+    assert draft.results[0].source_page == 1
 
 
 def test_gemini_provider_returns_validated_report(monkeypatch) -> None:

@@ -120,10 +120,8 @@ export function ReportDashboard({ report, onReview, onReset }: { report: Structu
             <p className="text-xs font-bold uppercase text-[var(--teal)]">{translate(language, "bodyMap")}</p>
             <p className="mt-1 text-sm text-[var(--muted)]">{translate(language, "selected")}: <strong className="text-[var(--ink)]">{anatomyResult.name}</strong></p>
           </div>
-          <div className="relative">
-            <div className="absolute left-3 top-3 z-10 border border-[var(--line)] bg-white/90 px-3 py-2 shadow-sm backdrop-blur"><p className="text-[10px] font-bold uppercase text-[var(--muted)]">{translate(language, "healthRating")}</p><p className="mt-0.5 text-2xl font-semibold text-[var(--ink)]">{healthRating}<span className="text-sm text-[var(--muted)]">/100</span></p><p className="max-w-32 text-[9px] leading-3 text-[var(--muted)]">{translate(language, "ratingNote")}</p></div>
+          <div className="mb-3 flex items-center justify-between border border-[var(--line)] bg-white px-3 py-2"><div><p className="text-[10px] font-bold uppercase text-[var(--muted)]">{translate(language, "healthRating")}</p><p className="mt-0.5 text-2xl font-semibold text-[var(--ink)]">{healthRating}<span className="text-sm text-[var(--muted)]">/100</span></p></div><p className="max-w-28 text-right text-[9px] leading-3 text-[var(--muted)]">{translate(language, "ratingNote")}</p></div>
           <AnatomicalBody anatomy={getResultAnatomy(anatomyResult)} />
-          </div>
         </aside>
         <div className="min-w-0">
           <div className="grid border-y border-[var(--line)] grid-cols-2 xl:grid-cols-4">

@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field, model_validator
 class ExtractedPage(BaseModel):
     page_number: int
     text: str
+    extraction_method: Literal["native", "tesseract"] = "native"
+    needs_review: bool = False
 
 
 class ReportExtractionResponse(BaseModel):

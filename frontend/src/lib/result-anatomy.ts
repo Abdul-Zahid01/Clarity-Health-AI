@@ -7,6 +7,7 @@ export type BodyRegion =
   | "brain"
   | "muscles"
   | "liver"
+  | "stomach"
   | "kidneys"
   | "thyroid"
   | "pancreas"
@@ -33,6 +34,9 @@ export function getResultAnatomy(result: LabResult): ResultAnatomy {
   }
   if (name.includes("bilirubin")) {
     return { regions: ["blood", "liver"], label: "Red-cell breakdown & liver", explanation: "Bilirubin forms as old red blood cells break down and is then processed by the liver." };
+  }
+  if (name.includes("amylase") || name.includes("lipase") || name.includes("gastrin")) {
+    return { regions: ["stomach", "pancreas"], label: "Stomach & pancreas", explanation: "Digestive enzymes and hormones are produced across the stomach and pancreas and help process food." };
   }
   if (name.includes("sgot") || name.includes("sgpt") || /\bast\b/.test(name) || /\balt\b/.test(name)) {
     return { regions: name.includes("ast") || name.includes("sgot") ? ["liver", "muscles"] : ["liver"], label: "Liver and related tissues", explanation: "These enzymes are reviewed mainly with the liver; AST is also present in muscle and other tissues." };

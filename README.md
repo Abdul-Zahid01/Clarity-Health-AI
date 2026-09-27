@@ -260,7 +260,7 @@ OpenStreetMap does not provide dependable doctor ratings or review text. The UI 
 
 ## Known Limitations
 
-- Only PDFs with selectable text are currently supported; OCR is planned.
+- Native text extraction is preferred; image-only pages use the CPU Tesseract fallback and are marked for review.
 - AI extraction has not yet been benchmarked against a large golden dataset.
 - The application has no authentication or persistent report history.
 - Educational translations have not received professional medical review.
@@ -272,7 +272,7 @@ OpenStreetMap does not provide dependable doctor ratings or review text. The UI 
 ## Roadmap
 
 - Build a versioned synthetic evaluation dataset and accuracy metrics
-- Add OCR fallback with extraction provenance
+- Improve Tesseract OCR evaluation and add a GPU-backed OCR service only if CPU quality is insufficient
 - Detect and redact identifiers before cloud processing
 - Generate frontend types from FastAPI's OpenAPI schema
 - Add authentication, encrypted storage, and deletion controls
@@ -283,8 +283,22 @@ OpenStreetMap does not provide dependable doctor ratings or review text. The UI 
 ## Interview Resources
 
 - [Comprehensive architecture and interview guide](docs/INTERVIEW_GUIDE.md)
+- [Word-for-word meeting and demo script](docs/INTERVIEW_MEETING_SCRIPT.md)
 - [Last-minute interview cheat sheet](docs/INTERVIEW_CHEAT_SHEET.md)
 
 ## Responsible Use
 
 This repository is intended for prototyping, education, and portfolio demonstration. Do not upload identifiable medical records without appropriate permission, de-identification, security controls, and legal review.
+
+## Tesseract OCR Setup
+
+Tesseract is a separate system executable. The Python packages are installed from `backend/requirements.txt`, but the executable must also be installed on the machine.
+
+Windows with WinGet:
+
+```powershell
+winget install --id tesseract-ocr.tesseract --exact
+tesseract --version
+```
+
+On macOS or Linux, install the `tesseract-ocr` package through the operating system package manager. Native PyMuPDF extraction remains the default; Tesseract runs only for pages where no readable native text is found. OCR pages are marked `needs_review` because a single digit or flag can be misread.

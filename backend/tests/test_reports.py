@@ -35,10 +35,10 @@ def test_extracts_text_with_page_numbers() -> None:
     payload = response.json()
     assert payload["filename"] == "sample.pdf"
     assert payload["page_count"] == 2
-    assert payload["pages"][0] == {
-        "page_number": 1,
-        "text": "Hemoglobin: 13.4 g/dL",
-    }
+    assert payload["pages"][0]["page_number"] == 1
+    assert payload["pages"][0]["text"] == "Hemoglobin: 13.4 g/dL"
+    assert payload["pages"][0]["extraction_method"] == "native"
+    assert payload["pages"][0]["needs_review"] is False
     assert payload["pages"][1]["page_number"] == 2
     assert payload["warnings"] == []
 
@@ -60,7 +60,22 @@ def test_explains_when_pdf_has_no_selectable_text() -> None:
     )
 
     assert response.status_code == 400
-    assert "No selectable text" in response.json()["detail"]
+    assert "No readable text" in response.json()["detail"]
+
+
+def test_uses_tesseract_for_empty_pages(monkeypatch) -> None:
+    monkeypatch.setattr("app.pdf_parser.pytesseract.image_to_string", lambda image: "Glucose 92 mg/dL")
+    response = client.post(
+        "/api/reports/extract",
+        files={"file": ("scan.pdf", create_pdf([""]), "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    page = response.json()["pages"][0]
+    assert page["text"] == "Glucose 92 mg/dL"
+    assert page["extraction_method"] == "tesseract"
+    assert page["needs_review"] is True
+    assert "Tesseract OCR was used" in response.json()["warnings"][0]
 
 
 def test_structure_requires_cloud_processing_confirmation() -> None:

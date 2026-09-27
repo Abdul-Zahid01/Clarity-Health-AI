@@ -18,6 +18,11 @@ class KnowledgeBaseIngestionError(ValueError):
     pass
 
 
+def _needs_ocr(message: str) -> bool:
+    normalized_message = message.casefold()
+    return "no selectable text" in normalized_message or "no readable text" in normalized_message
+
+
 def normalize_text(text: str) -> str:
     """Remove PDF control characters and collapse layout whitespace."""
 
@@ -101,7 +106,7 @@ def build_knowledge_base(
                 KnowledgeDocumentIssue(
                     source_filename=pdf_path.name,
                     reason=str(error),
-                    needs_ocr="No selectable text" in str(error),
+                    needs_ocr=_needs_ocr(str(error)),
                 )
             )
             continue
@@ -110,7 +115,7 @@ def build_knowledge_base(
             KnowledgeDocumentIssue(
                 source_filename=pdf_path.name,
                 reason=warning,
-                needs_ocr="No selectable text" in warning,
+                needs_ocr=_needs_ocr(warning),
             )
             for warning in warnings
         )

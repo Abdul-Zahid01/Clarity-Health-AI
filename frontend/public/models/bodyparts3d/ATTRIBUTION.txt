@@ -1,0 +1,5 @@
+BodyParts3D, (c) The Database Center for Life Science licensed under CC Attribution 4.0 International.
+
+Source: https://dbarchive.biosciencedbc.jp/en/bodyparts3d/download.html
+License: https://dbarchive.biosciencedbc.jp/en/bodyparts3d/lic.html
+Asset: human skin mesh, FJ2810 / BP10155, BodyParts3D 4.0

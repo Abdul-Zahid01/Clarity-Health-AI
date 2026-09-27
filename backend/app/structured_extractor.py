@@ -1,4 +1,5 @@
 import os
+import re
 
 from dotenv import load_dotenv
 from google import genai
@@ -46,15 +47,76 @@ def validate_source_evidence(
     draft: StructuredReportDraft,
     pages: list[ExtractedPage],
 ) -> None:
-    page_text = {
-        page.page_number: " ".join(page.text.split()).casefold() for page in pages
-    }
+    page_text = {page.page_number: page.text.casefold() for page in pages}
     for result in draft.results:
         normalized_source = " ".join(result.source_text.split()).casefold()
-        if not normalized_source or normalized_source not in page_text.get(result.source_page, ""):
+        flattened_page = " ".join(page_text.get(result.source_page, "").split())
+        if normalized_source and normalized_source in flattened_page:
+            continue
+
+        selected_page_text = page_text.get(result.source_page, "")
+        if _result_tokens_match_page(result, selected_page_text):
+            result.source_text = _evidence_excerpt(result, pages, result.source_page)
+            continue
+
+        matching_pages = [
+            page_number
+            for page_number, text in page_text.items()
+            if _result_tokens_match_page(result, text)
+        ]
+        if len(matching_pages) == 1:
+            result.source_page = matching_pages[0]
+            result.source_text = _evidence_excerpt(result, pages, matching_pages[0])
+            continue
+
+        if not normalized_source or not matching_pages:
             raise StructuredExtractionFailed(
                 f"Source evidence for '{result.name}' was not found on page {result.source_page}."
             )
+        raise StructuredExtractionFailed(
+            f"Source evidence for '{result.name}' matched multiple pages and needs review."
+        )
+
+
+def _result_tokens_match_page(result, normalized_page_text: str) -> bool:
+    name = " ".join(result.name.split()).casefold()
+    if not name:
+        return False
+
+    tokens = []
+    if result.value_numeric is not None:
+        tokens.append(_numeric_token(result.value_numeric))
+    elif result.value_text:
+        tokens.append(" ".join(result.value_text.split()).casefold())
+    for boundary in (result.reference_min, result.reference_max):
+        if boundary is not None:
+            tokens.append(_numeric_token(boundary))
+
+    lines = [" ".join(line.split()).casefold() for line in normalized_page_text.splitlines() if line.strip()]
+    name_pattern = re.compile(rf"(?<![a-z0-9]){re.escape(name)}(?![a-z0-9])")
+    matching_name_indexes = [
+        index for index, line in enumerate(lines) if name_pattern.search(line)
+    ]
+    for name_index in matching_name_indexes:
+        # Keep the name, value, and range in one local report block. This avoids
+        # matching BUN in both the BUN result and BUN/creatinine ratio sections.
+        block = " ".join(lines[name_index:name_index + 8])
+        if all(token in block for token in tokens):
+            return True
+    return False
+
+
+def _numeric_token(value: float) -> str:
+    return str(int(value)) if value.is_integer() else str(value)
+
+
+def _evidence_excerpt(result, pages: list[ExtractedPage], page_number: int) -> str:
+    page = next(page for page in pages if page.page_number == page_number)
+    lines = [line.strip() for line in page.text.splitlines() if line.strip()]
+    name = result.name.casefold()
+    value = str(result.value_numeric).casefold() if result.value_numeric is not None else ""
+    selected = [line for line in lines if name in line.casefold() or (value and value in line.casefold())]
+    return " ".join(selected[:4]) or page.text.strip()
 
 
 async def extract_structured_report(

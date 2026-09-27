@@ -2,6 +2,8 @@
 
 This guide explains the project from a beginner's perspective and gives you language you can use during a junior AI prototype engineer interview.
 
+For a word-for-word presentation and demo dialogue, use [`INTERVIEW_MEETING_SCRIPT.md`](INTERVIEW_MEETING_SCRIPT.md).
+
 > Important: Clarity Health is an educational prototype. It does not diagnose conditions, prescribe treatment, or replace a qualified healthcare professional. Demonstrate it with synthetic or properly de-identified reports only.
 
 ## 1. Thirty-Second Introduction
@@ -1143,9 +1145,9 @@ Also measure:
 - Cost per report
 - Translation quality
 
-## 26. OCR: Planned Future Architecture
+## 26. OCR: CPU Tesseract Fallback
 
-Current PyMuPDF extraction works for PDFs with selectable text.
+Current PyMuPDF extraction is preferred for PDFs with selectable text. Image-only pages now fall back to CPU Tesseract.
 
 Future flow:
 
@@ -1164,13 +1166,20 @@ Possible OCR options:
 
 | Option | Positive | Negative |
 |---|---|---|
-| Tesseract | Free and local | Weaker on complex layouts; deployment setup |
+| Tesseract | Free, local, and CPU-friendly | Weaker on complex layouts; requires system executable |
 | Azure Document Intelligence | Strong layout/table support | Cost, cloud privacy, vendor dependency |
 | Gemini vision | Understands visual context | More expensive and probabilistic |
 
 Recommended approach:
 
-> Use native extraction first and OCR only pages that need it. Record `extraction_method` and automatically require review for OCR-derived fields.
+> Use native extraction first and OCR only pages that need it. Record `extraction_method` as `tesseract` and automatically require review for OCR-derived fields.
+
+Windows setup:
+
+```powershell
+winget install --id tesseract-ocr.tesseract --exact
+tesseract --version
+```
 
 ## 27. Cost and Performance
 
@@ -1286,7 +1295,7 @@ How to describe debugging:
 
 ## 32. Current Limitations
 
-- Only text-based PDFs are supported; OCR is not implemented.
+- Native text extraction is preferred; image-only pages use CPU Tesseract and are marked for review.
 - AI extraction quality is not yet evaluated across a large golden dataset.
 - The app supports common lab tests but uses generic education for unfamiliar markers.
 - Translations are not professionally medically reviewed.
@@ -1304,7 +1313,7 @@ Naming limitations honestly is a strength, not a weakness.
 
 1. Build a versioned synthetic evaluation dataset.
 2. Measure extraction field accuracy, omission, and hallucination.
-3. Add OCR fallback with provenance.
+3. Evaluate Tesseract accuracy across scanned reports and preserve OCR provenance.
 4. Add automatic identifier detection and redaction.
 5. Add authentication and authorization.
 6. Add encrypted storage with explicit retention/deletion controls.

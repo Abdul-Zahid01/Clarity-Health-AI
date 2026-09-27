@@ -1,6 +1,6 @@
 # Clarity Health Interview Cheat Sheet
 
-Use this for quick revision. Read the full [`INTERVIEW_GUIDE.md`](INTERVIEW_GUIDE.md) when learning the details.
+Use this for quick revision. Read the full [`INTERVIEW_GUIDE.md`](INTERVIEW_GUIDE.md) when learning the details, and rehearse with [`INTERVIEW_MEETING_SCRIPT.md`](INTERVIEW_MEETING_SCRIPT.md).
 
 ## Elevator Pitch
 
