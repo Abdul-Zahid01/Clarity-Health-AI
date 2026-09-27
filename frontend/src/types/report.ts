@@ -66,3 +66,23 @@ export type ReportAnswer = {
   suggested_questions: string[];
   references: ReferenceLink[];
 };
+
+export type RagSource = {
+  source_id: string;
+  source_type: "report" | "knowledge_base";
+  title: string;
+  page: number;
+  excerpt: string;
+};
+
+export type RagAnswer = {
+  answerable: boolean;
+  answer: string;
+  claims: Array<{
+    text: string;
+    citations: Array<{ source_id: string; evidence_quote: string }>;
+  }>;
+  sources: RagSource[];
+  safety_note: string;
+  suggested_questions: string[];
+};

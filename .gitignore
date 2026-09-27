@@ -3,6 +3,7 @@ backend/.env
 backend/__pycache__/
 backend/.pytest_cache/
 backend/**/*.py[cod]
+/venv/
 frontend/.next/
 frontend/node_modules/
 frontend/.env*.local
