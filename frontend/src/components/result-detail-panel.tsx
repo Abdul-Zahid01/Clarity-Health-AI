@@ -6,6 +6,8 @@ import { Bot, ExternalLink, LoaderCircle, Send, ShieldAlert, X } from "lucide-re
 
 import { ResultAnatomyIllustration } from "@/components/result-anatomy-illustration";
 import { ResultProcessLesson } from "@/components/result-process-lesson";
+import { useDialogFocus } from "@/lib/use-dialog-focus";
+import { useAssistantRequest } from "@/lib/use-assistant-request";
 import { askAboutResult, translateTexts } from "@/lib/api";
 import { getResultEducation } from "@/lib/result-education";
 import { researchReferences } from "@/lib/research-references";
@@ -35,17 +37,12 @@ export function ResultDetailPanel({ result, language, onClose, allowAssistant = 
   const [suggestions, setSuggestions] = useState<string[]>(resultSuggestions[language](result.name));
   const [safetyNote, setSafetyNote] = useState("Educational information only — not a diagnosis or treatment recommendation.");
   const [error, setError] = useState<string | null>(null);
-  const [isAsking, setIsAsking] = useState(false);
+  const request = useAssistantRequest();
+  const isAsking = request.busy;
   const [references, setReferences] = useState<ReferenceLink[]>(researchReferences(result));
   const conversationEnd = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [onClose]);
+  const dialog = useDialogFocus(onClose, true);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -55,14 +52,15 @@ export function ResultDetailPanel({ result, language, onClose, allowAssistant = 
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     if (language !== "en" && allowAssistant) {
-      void translateTexts([education.overview, education.purpose, education.outsideRange], language).then(([overview, purpose, outsideRange]) => {
+      void translateTexts([education.overview, education.purpose, education.outsideRange], language, controller.signal).then(([overview, purpose, outsideRange]) => {
         if (!cancelled) setTranslatedEducation({ language, content: { ...education, overview, purpose, outsideRange } });
       }).catch((error: unknown) => {
         if (!cancelled) setTranslationFailure({ language, message: error instanceof Error ? error.message : "Translation is unavailable." });
       });
     }
-    return () => { cancelled = true; };
+    return () => { cancelled = true; controller.abort(); };
   }, [education, language, allowAssistant]);
   const displayedEducation = translatedEducation?.language === language ? translatedEducation.content : education;
 
@@ -70,27 +68,31 @@ export function ResultDetailPanel({ result, language, onClose, allowAssistant = 
     event?.preventDefault();
     const nextQuestion = (suggestedQuestion ?? question).trim();
     if (!nextQuestion || isAsking || !allowAssistant) return;
+    const controller = request.begin();
+    if (!controller) return;
     const history = messages;
     setMessages((current) => [...current, { role: "user", content: nextQuestion }]);
-    setQuestion("");
+    setQuestion(nextQuestion);
     setError(null);
-    setIsAsking(true);
     try {
-      const response = await askAboutResult(result, nextQuestion, history, language);
+      const response = await askAboutResult(result, nextQuestion, history, language, controller.signal);
+      if (controller.signal.aborted) return;
+      setQuestion("");
       setMessages((current) => [...current, { role: "assistant", content: response.answer }]);
       setSafetyNote(response.safety_note);
       setSuggestions(response.suggested_questions);
       setReferences(response.references);
     } catch (requestError) {
+      if (controller.signal.aborted) return;
       setError(requestError instanceof Error ? requestError.message : "The assistant could not answer right now.");
     } finally {
-      setIsAsking(false);
+      request.finish(controller);
     }
   }
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-zinc-950/35" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <aside dir={languageDirection(language)} role="dialog" aria-modal="true" aria-labelledby="result-detail-title" className="h-dvh min-w-0 w-full overflow-y-auto bg-[var(--background)] shadow-2xl [overflow-wrap:anywhere] sm:max-w-2xl">
+      <aside ref={dialog} tabIndex={-1} dir={languageDirection(language)} role="dialog" aria-modal="true" aria-labelledby="result-detail-title" className="h-dvh min-w-0 w-full overflow-y-auto bg-[var(--background)] shadow-2xl [overflow-wrap:anywhere] sm:max-w-2xl">
         <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[var(--line)] bg-white/95 px-5 py-4 backdrop-blur">
           <div className="min-w-0"><p className="text-xs font-bold uppercase text-[var(--teal)]">Learn about this result</p><h2 id="result-detail-title" className="font-display mt-1 text-xl font-semibold text-[var(--ink)] sm:text-2xl">{result.name}</h2></div>
           <button type="button" onClick={onClose} title="Close result details" className="grid size-10 shrink-0 place-items-center border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"><X className="size-5" /><span className="sr-only">Close result details</span></button>
@@ -98,6 +100,7 @@ export function ResultDetailPanel({ result, language, onClose, allowAssistant = 
 
         <div className="p-5 sm:p-7">
           <ResultProcessLesson result={result} />
+          {language !== "en" && <p className="mt-2 text-xs text-zinc-600" lang="en" dir="ltr">The process diagram and its teaching captions are currently in English.</p>}
           <details className="mt-4 rounded-xl border border-[var(--line)] bg-white"><summary className="cursor-pointer px-4 py-3 text-xs font-semibold text-teal-800">Where is this in the body?</summary><ResultAnatomyIllustration result={result} /></details>
           <details className="mt-4 overflow-hidden rounded-xl border border-[var(--line)] bg-white">
             <summary className="cursor-pointer px-4 py-3 text-xs font-semibold text-teal-800">Additional laboratory illustration</summary>
@@ -126,7 +129,8 @@ export function ResultDetailPanel({ result, language, onClose, allowAssistant = 
             {error && <p role="alert" className="mt-3 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
             <details className="mt-4 rounded-xl border border-zinc-200 bg-white p-3" open={messages.length === 0}><summary className="cursor-pointer text-xs font-semibold text-teal-800">Suggested questions</summary><div className="mt-3 grid gap-2">{suggestions.map((suggestion) => <button key={suggestion} type="button" disabled={isAsking} onClick={() => void submitQuestion(undefined, suggestion)} className="rounded-lg border border-zinc-200 px-3 py-2 text-start text-xs text-zinc-700 hover:border-teal-700 disabled:opacity-40 [overflow-wrap:anywhere]">{suggestion}</button>)}</div></details>
 
-            <form onSubmit={(event) => void submitQuestion(event)} className="mt-4 flex gap-2"><label className="sr-only" htmlFor="result-question">Ask a question</label><textarea id="result-question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about this test…" rows={2} maxLength={1000} className="min-h-16 min-w-0 flex-1 resize-none rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-700" /><button type="submit" disabled={!question.trim() || isAsking} title="Send question" className="grid w-12 shrink-0 place-items-center rounded-xl bg-[var(--ink)] text-white hover:bg-teal-700 disabled:opacity-40"><Send className="size-4" /><span className="sr-only">Send question</span></button></form>
+            {request.notice && <p role="status" className="mt-3 text-xs text-teal-900">{request.notice}</p>}
+            <form onSubmit={(event) => void submitQuestion(event)} className="mt-4 flex gap-2"><label className="sr-only" htmlFor="result-question">Ask a question</label><textarea id="result-question" value={question} disabled={isAsking} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about this test…" rows={2} maxLength={1000} className="min-h-16 min-w-0 flex-1 resize-none rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-700" />{isAsking ? <button key="stop" type="button" onClick={(event) => { event.preventDefault(); request.cancel(); }} className="rounded-xl border border-teal-700 px-3 text-xs font-semibold text-teal-900">Stop request</button> : <button key="send" type="submit" disabled={!question.trim()} title="Send question" className="grid w-12 shrink-0 place-items-center rounded-xl bg-[var(--ink)] text-white hover:bg-teal-700 disabled:opacity-40"><Send className="size-4" /><span className="sr-only">Send question</span></button>}</form>
             {references.length > 0 && <div className="mt-4 space-y-2 border-t border-zinc-200 pt-4">{references.map((reference) => <a key={reference.url} href={reference.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-xs font-semibold text-teal-700 hover:underline"><ExternalLink className="size-3.5" />{reference.source}: {reference.title}</a>)}</div>}
             <p className="mt-4 flex items-start gap-2 text-xs leading-5 text-zinc-500"><ShieldAlert className="mt-0.5 size-3.5 shrink-0" />{safetyNote || translate(language, "educationalOnly")}</p>
           </section>}

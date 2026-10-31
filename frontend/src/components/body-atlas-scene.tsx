@@ -2,20 +2,25 @@
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Html, OrbitControls, useGLTF } from "@react-three/drei";
-import { Suspense, useEffect, useMemo, useRef, type ComponentRef, type ReactNode } from "react";
+import { createContext, Suspense, useContext, useEffect, useMemo, useRef, type ComponentRef, type ReactNode } from "react";
 import * as THREE from "three";
 
 import { bodyRegions, type BodyRegion, type ResultAnatomy } from "@/lib/result-anatomy";
+import { atlasFrame } from "@/lib/atlas-view";
 
 type Point = [number, number, number];
 type SceneProps = {
   anatomy: ResultAnatomy;
   animate: boolean;
+  transition: boolean;
+  isolated: boolean;
+  focusedRegion: BodyRegion | null;
   rotation: number;
   resetVersion: number;
   onReady: () => void;
   onContextLost: () => void;
 };
+const IsolationContext = createContext(false);
 
 const NERVES: Point[][] = [
   [[0, 1.65, -0.12], [0, 0.65, -0.13], [0, -0.45, -0.1]],
@@ -58,11 +63,12 @@ function RenderLifecycle({ animate, onContextLost }: Pick<SceneProps, "animate" 
 }
 
 function HumanShell({ onReady }: Pick<SceneProps, "onReady">) {
+  const isolated = useContext(IsolationContext);
   const { scene } = useGLTF("/models/bodyparts3d/human-skin.glb");
   const { model, material } = useMemo(() => {
     const model = scene.clone(true);
     const material = new THREE.MeshStandardMaterial({
-      color: "#c79879", transparent: true, opacity: 0.1, roughness: 0.8,
+      color: "#c79879", transparent: true, opacity: isolated ? 0.045 : 0.1, roughness: 0.8,
       depthWrite: false, side: THREE.FrontSide,
     });
     model.rotation.x = -Math.PI / 2;
@@ -81,7 +87,7 @@ function HumanShell({ onReady }: Pick<SceneProps, "onReady">) {
       }
     });
     return { model: normalized, material };
-  }, [scene]);
+  }, [scene, isolated]);
   useEffect(() => {
     onReady();
     return () => material.dispose();
@@ -92,10 +98,11 @@ function HumanShell({ onReady }: Pick<SceneProps, "onReady">) {
 function Organ({ position, scale, highlighted, color = bodyRegions.muscles.color, children }: {
   position: Point; scale: Point; highlighted: boolean; color?: string; children?: ReactNode;
 }) {
+  const isolated = useContext(IsolationContext);
   return (
-    <mesh position={position} scale={scale}>
+    <mesh position={position} scale={scale} visible={!isolated || highlighted}>
       {children ?? <sphereGeometry args={[1, 24, 16]} />}
-      <meshStandardMaterial color={color} emissive={color} emissiveIntensity={highlighted ? 0.65 : 0} transparent opacity={highlighted ? 1 : 0.48} roughness={0.6} metalness={0.02} />
+      <meshStandardMaterial color={color} emissive={color} emissiveIntensity={highlighted ? 0.18 : 0} transparent opacity={highlighted ? 1 : 0.42} roughness={0.52} metalness={0.02} />
     </mesh>
   );
 }
@@ -103,8 +110,9 @@ function Organ({ position, scale, highlighted, color = bodyRegions.muscles.color
 function Pathway({ points, highlighted, radius = 0.012, color = bodyRegions.blood.color }: {
   points: Point[]; highlighted: boolean; radius?: number; color?: string;
 }) {
+  const isolated = useContext(IsolationContext);
   const curve = useMemo(() => new THREE.CatmullRomCurve3(points.map((point) => new THREE.Vector3(...point))), [points]);
-  return <mesh><tubeGeometry args={[curve, 32, highlighted ? radius * 1.3 : radius, 6, false]} /><meshBasicMaterial color={color} transparent opacity={highlighted ? 1 : 0.23} depthWrite={false} /></mesh>;
+  return <mesh visible={!isolated || highlighted}><tubeGeometry args={[curve, 32, highlighted ? radius * 1.3 : radius, 6, false]} /><meshBasicMaterial color={color} transparent opacity={highlighted ? 1 : 0.23} depthWrite={false} /></mesh>;
 }
 
 function FlowParticles({ animate }: Pick<SceneProps, "animate">) {
@@ -146,6 +154,14 @@ function Anatomy({ anatomy, animate, rotation, onReady }: Pick<SceneProps, "anat
     shape.bezierCurveTo(0.02, 0.05, 0.15, 0.15, 0.02, 0.2);
     return shape;
   }, []);
+  const liverShape = useMemo(() => {
+    const shape = new THREE.Shape();
+    shape.moveTo(-0.3, 0.06);
+    shape.bezierCurveTo(-0.26, 0.22, 0.06, 0.18, 0.27, 0.04);
+    shape.bezierCurveTo(0.23, -0.07, 0.05, -0.07, -0.05, -0.03);
+    shape.bezierCurveTo(-0.12, -0.18, -0.31, -0.1, -0.3, 0.06);
+    return shape;
+  }, []);
   return (
     <group ref={body} rotation={[0, rotation, 0]}>
       <Suspense fallback={null}><HumanShell onReady={onReady} /></Suspense>
@@ -156,7 +172,7 @@ function Anatomy({ anatomy, animate, rotation, onReady }: Pick<SceneProps, "anat
         const point = REGION_POINTS[region];
         return point ? <group key={region} position={point}>
           <mesh><torusGeometry args={[0.115, 0.008, 6, 32]} /><meshBasicMaterial color="#0b6058" depthTest={false} transparent opacity={0.85} /></mesh>
-          <Html position={[0.17, 0, 0]} zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}><span className="whitespace-nowrap rounded border border-teal-300 bg-white/95 px-1.5 py-1 text-[10px] font-bold text-teal-900">{bodyRegions[region].label}</span></Html>
+          <Html position={[region === "liver" || region === "pituitary" ? -0.2 : 0.17, 0, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}><span className="block max-w-24 rounded-lg border border-teal-300 bg-white/95 px-2 py-1 text-center text-[11px] font-bold leading-4 text-teal-900 shadow-sm">{bodyRegions[region].label}</span></Html>
         </group> : null;
       })}
       {NERVES.map((points, index) => <Pathway key={`nerve-${index}`} points={points} highlighted={isActive("nerves")} color={bodyRegions.nerves.color} radius={0.012} />)}
@@ -183,9 +199,11 @@ function Anatomy({ anatomy, animate, rotation, onReady }: Pick<SceneProps, "anat
       <group ref={heart} position={[0.065, 0.72, 0.2]} rotation={[0, 0, -0.3]}>
         <Organ position={[0, -0.035, 0]} scale={[0.105, 0.16, 0.09]} highlighted={isActive("heart")} color={bodyRegions.heart.color} />
         <Organ position={[-0.065, 0.07, 0]} scale={[0.07, 0.065, 0.07]} highlighted={isActive("heart")} color={bodyRegions.heart.color} />
+        <Organ position={[0.05, 0.035, -0.02]} scale={[0.07, 0.095, 0.07]} highlighted={isActive("heart")} color="#923d4a" />
         <Pathway points={[[0, 0.07, 0], [0, 0.22, 0], [-0.08, 0.22, 0], [-0.09, 0.1, 0]]} highlighted={isActive("heart")} radius={0.025} />
+        <Pathway points={[[0.04, 0.06, 0.03], [0.09, 0.16, 0.02], [0.18, 0.18, 0]]} highlighted={isActive("heart")} radius={0.021} color="#6e879c" />
       </group>
-      <Organ position={[-0.19, 0.35, 0.14]} scale={[0.26, 0.13, 0.17]} highlighted={isActive("liver")} color={bodyRegions.liver.color} />
+      <Organ position={[-0.13, 0.33, 0.12]} scale={[1, 1, 1]} highlighted={isActive("liver")} color={bodyRegions.liver.color}><extrudeGeometry args={[liverShape, { depth: 0.08, bevelEnabled: true, bevelSize: 0.035, bevelThickness: 0.035, bevelSegments: 3, steps: 1, curveSegments: 14 }]} /></Organ>
       <Organ position={[0.2, 0.27, 0.12]} scale={[0.12, 0.17, 0.11]} highlighted={isActive("stomach")} color={bodyRegions.stomach.color} />
       <Organ position={[0.07, 0.05, 0.15]} scale={[0.2, 0.045, 0.06]} highlighted={isActive("pancreas")} color={bodyRegions.pancreas.color} />
       <Organ position={[0, -0.57, 0.14]} scale={[0.11, 0.12, 0.09]} highlighted={isActive("urinary")} color={bodyRegions.urinary.color} />
@@ -195,10 +213,31 @@ function Anatomy({ anatomy, animate, rotation, onReady }: Pick<SceneProps, "anat
   );
 }
 
-function Controls({ resetVersion }: Pick<SceneProps, "resetVersion">) {
+function Controls({ resetVersion, focusedRegion, transition }: Pick<SceneProps, "resetVersion" | "focusedRegion" | "transition">) {
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
-  useEffect(() => { controls.current?.reset(); }, [resetVersion]);
-  return <OrbitControls ref={controls} target={[0, 0, 0]} enablePan={false} enableZoom={false} enableDamping={false} minPolarAngle={Math.PI / 2.8} maxPolarAngle={Math.PI / 1.65} />;
+  const { camera, size, invalidate } = useThree();
+  const goal = useRef<{ position: THREE.Vector3; target: THREE.Vector3 } | null>(null);
+  useEffect(() => {
+    const frame = atlasFrame(focusedRegion);
+    const distance = Math.max(frame.height, frame.width / (size.width / size.height)) / (2 * Math.tan(34 * Math.PI / 360));
+    goal.current = { position: new THREE.Vector3(0, frame.centerY, distance), target: new THREE.Vector3(0, frame.centerY, 0) };
+    invalidate();
+  }, [focusedRegion, resetVersion, size.width, size.height, invalidate]);
+  useFrame((_state, delta) => {
+    if (!goal.current || !controls.current) return;
+    const { position, target } = goal.current;
+    const progress = transition ? 1 - Math.exp(-Math.min(delta, 0.05) * 9) : 1;
+    camera.position.lerp(position, progress);
+    controls.current.target.lerp(target, progress);
+    controls.current.update();
+    if (camera.position.distanceTo(position) < 0.002 && controls.current.target.distanceTo(target) < 0.002) {
+      camera.position.copy(position);
+      controls.current.target.copy(target);
+      controls.current.update();
+      goal.current = null;
+    } else invalidate();
+  });
+  return <OrbitControls ref={controls} onStart={() => { goal.current = null; }} enablePan={false} enableZoom={false} enableDamping={false} minPolarAngle={Math.PI / 2.8} maxPolarAngle={Math.PI / 1.65} />;
 }
 
 export function BodyAtlasScene(props: SceneProps) {
@@ -212,11 +251,12 @@ export function BodyAtlasScene(props: SceneProps) {
       fallback={<p role="status" className="atlas-message">WebGL is not available. Read the related systems below.</p>}
     >
       <RenderLifecycle animate={props.animate} onContextLost={props.onContextLost} />
-      <ambientLight intensity={1.6} />
-      <directionalLight position={[3, 4, 5]} intensity={2.2} color="#fff4e3" />
-      <directionalLight position={[-3, 1, 2]} intensity={1.2} color="#d2f3ee" />
-      <Anatomy anatomy={props.anatomy} animate={props.animate} rotation={props.rotation} onReady={props.onReady} />
-      <Controls resetVersion={props.resetVersion} />
+      <ambientLight intensity={0.85} />
+      <hemisphereLight args={["#fff4e3", "#667c76", 0.7]} />
+      <directionalLight position={[3, 4, 5]} intensity={1.8} color="#fff4e3" />
+      <directionalLight position={[-3, 1, -2]} intensity={1.4} color="#d2f3ee" />
+      <IsolationContext.Provider value={props.isolated}><Anatomy anatomy={props.anatomy} animate={props.animate} rotation={props.rotation} onReady={props.onReady} /></IsolationContext.Provider>
+      <Controls resetVersion={props.resetVersion} focusedRegion={props.focusedRegion} transition={props.transition} />
     </Canvas>
   );
 }

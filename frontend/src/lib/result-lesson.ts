@@ -1,7 +1,7 @@
 import { getResultAnatomy, normalizeMarkerName } from "./result-anatomy";
 import type { LabResult } from "../types/report";
 
-export type LessonKind = "thyroid" | "red-cells" | "immune" | "platelets" | "kidney" | "glucose" | "liver" | "heart" | "lipids" | "bone" | "nerves" | "sample";
+export type LessonKind = "thyroid" | "red-cells" | "immune" | "platelets" | "kidney" | "glucose" | "hba1c" | "bilirubin" | "liver" | "heart" | "lipids" | "bone" | "nerves" | "sample";
 export type ResultLesson = {
   kind: LessonKind;
   title: string;
@@ -10,6 +10,16 @@ export type ResultLesson = {
 };
 
 const lessons: Record<LessonKind, Omit<ResultLesson, "kind">> = {
+  hba1c: {
+    title: "Glucose leaves a mark on hemoglobin",
+    steps: ["Glucose circulates", "Attachment over time", "A proportion is measured"],
+    captions: ["Glucose travels in blood alongside red cells. This is different from measuring blood glucose at one moment.", "Some glucose attaches to hemoglobin inside red cells over their lifetime. This illustration shows the process, not your cells.", "HbA1c measures the proportion of glycated hemoglobin. Red-cell lifespan and some blood conditions can affect interpretation; it is not a direct picture of the pancreas."],
+  },
+  bilirubin: {
+    title: "From red-cell recycling to bile",
+    steps: ["Heme is recycled", "Liver processing", "Different fractions"],
+    captions: ["Recycling heme, including from aging red cells, produces unconjugated (indirect) bilirubin, which travels bound to albumin.", "The liver takes up bilirubin and conjugates it, making it more water-soluble for removal through bile.", "Total, direct, and indirect bilirubin describe different fractions. Indirect bilirubin may be calculated by the laboratory. One result cannot locate disease or explain its cause."],
+  },
   thyroid: {
     title: "A hormone signal, not a picture of the gland",
     steps: ["Pituitary signal", "Thyroid response", "Blood measurement"],
@@ -78,7 +88,8 @@ export function getResultLesson(result: LabResult): ResultLesson {
   let kind: LessonKind = "sample";
   if (regions.includes("thyroid")) kind = "thyroid";
   else if (regions.includes("urinary") || regions.includes("kidneys")) kind = "kidney";
-  else if (/hba1c|glycated|glycosylated/.test(name)) kind = "red-cells";
+  else if (/hba1c|glycated|glycosylated/.test(name)) kind = "hba1c";
+  else if (/bilirubin/.test(name)) kind = "bilirubin";
   else if (/glucose|\b(?:fbs|rbs|ppbs)\b|blood sugar/.test(name)) kind = "glucose";
   else if (regions.includes("nerves")) kind = "nerves";
   else if (regions.includes("bones") && !regions.includes("liver")) kind = "bone";

@@ -256,7 +256,9 @@ Loading, WebGL failure, model errors, and context loss have explicit fallback co
 
 Organs retain natural tissue-inspired colors when selected; related structures brighten while context is muted. Ivory skeletal paths and golden nerves provide orientation. Hemoglobin selects circulation and marrow, not nerves; explicit cardiac markers select the heart with a subtle illustrative pulse, never a measured heartbeat. TSH selects the thyroid and a separate pituitary marker, with visible callouts and selection rings. Marker names normalize punctuation and support common count, thyroid, lipid, and chemistry aliases. Lipids show cardiovascular context rather than locating disease. Unknown tests do not invent organ associations.
 
-**Learn & ask** opens a focused, authored SVG process scene rather than repeating the full-body image: red-cell transport, immune cells, platelets, kidney filtration, glucose uptake, pituitary/thyroid signaling, liver processing, cardiac markers, lipid transport, mineral balance, or nerve support. HbA1c has red-cell rather than instantaneous-glucose context. Three selectable stages explain the process. Playback is opt-in and pauses offscreen or in hidden tabs; reduced-motion users use manual steps. These are schematic teaching scenes, not patient-specific simulations. The full-body location diagram and original laboratory illustration remain available in collapsed sections. New lesson copy is currently English.
+Select a related-system chip to frame that structure; **Isolate related structures** removes unrelated internals but keeps the body outline for orientation. **Whole body** restores framing; **Reset body view** also clears isolation/rotation. Camera transitions are finite, stop on manual orbit interaction, and become immediate when motion is paused or reduced. Distributed systems keep whole-body framing. The liver silhouette, heart details, and local lighting are authored schematics; no additional models were downloaded.
+
+**Learn & ask** opens one of 14 focused, authored SVG process scenes (including an unknown-marker fallback) rather than repeating the full-body image: red-cell transport, immune cells, platelets, kidney filtration, glucose uptake, pituitary/thyroid signaling, liver processing, cardiac markers, lipid transport, mineral balance, or nerve support. Dedicated HbA1c and bilirubin lessons explain glucose attachment over red-cell lifetime and heme recycling/liver conjugation, respectively. Three selectable stages explain the process. Playback is opt-in and pauses offscreen or in hidden tabs; reduced-motion users use manual steps. These are schematic teaching scenes, not patient-specific simulations. The full-body location diagram and original laboratory illustration remain available in collapsed sections. New lesson copy is currently English and marked as such in other languages.
 
 ### Anatomy tools researched
 
@@ -272,12 +274,15 @@ Recommendation: keep the current renderer, pair an overview atlas with focused p
 
 The report chat uses a bounded dynamic-viewport layout, a separately scrolling conversation, collapsible follow-up questions and safety details, and a compact pinned composer. Long answers, source excerpts, and questions wrap inside the panel.
 
+Result dialogs and fullscreen report chat trap focus, make the background inert, close with Escape, and return focus to the opener. Docked chat remains nonmodal. **Stop request** cancels the client request and ignores late completions; it does not guarantee that server/provider processing or billing stops. Failed/cancelled questions remain editable for manual retry. Changing the UI language resets assistant sessions and cancels their owned requests/audio.
+
 ### RAG voice support (opt-in)
 
-Open **Ask report → Research / RAG → Voice options**, read the disclosure, and enable voice for that chat session. **Dictate question** starts single-utterance browser recognition; **Finish dictation** ends capture, and **Cancel** aborts. The transcript is inserted into the editable draft, never automatically submitted. Verify it and remove identifiers before **Send**. Sending is disabled while listening. The selected UI language selects the speech locale.
+Open **Ask report → Research / RAG → Voice options**, read the disclosure, and enable voice for that chat session. **Dictate question** starts single-utterance browser recognition; **Finish dictation** waits for the final transcript (at most 10 seconds), and **Cancel dictation** aborts. Interim text is a separate preview; only finalized text is inserted into the editable draft, never automatically submitted. Verify it and remove identifiers before **Send**. Listening, transcribing, thinking, speaking, idle and error states are visible. Sending is disabled during capture or playback to avoid overlap. The selected UI language selects the speech locale; new voice-control copy is explicitly English.
 
 - [Browser SpeechRecognition](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition) has varying browser/language support and may send audio to the browser provider. It is not promised to be offline. HTTPS (or localhost), explicit consent, and microphone permission are required. Denied permissions, missing microphones, network errors, unsupported languages, and unavailable APIs have text fallbacks.
 - **Read latest answer** is explicit and includes the safety note. It uses only a matching [localService voice](https://developer.mozilla.org/en-US/docs/Web/API/SpeechSynthesisVoice/localService), with long text queued in small chunks. Without a local voice for the selected language it stays disabled rather than sending text to a remote synthesizer. Nothing is read automatically.
+- **Stop reading** cancels playback; **Mute read-aloud** cancels it and disables further playback until unmuted. Dictation cannot overlap owned playback or an answer request.
 - Closing chat, changing assistant/language, hiding the tab, or withdrawing voice consent cancels owned audio work. This app does not record or persist audio. Session consent is not persisted.
 - **Future local-first dictation:** an on-device Whisper-compatible model avoids a browser-provider dependency, but needs model downloads, CPU/memory, mobile benchmarking, and license review.
 - Voice does not make Gemini free: existing answer-generation quota and costs still apply. Use synthetic/de-identified inputs only for this prototype.
@@ -326,16 +331,38 @@ Run frontend checks:
 Set-Location frontend
 npm test
 npm run lint
+npx tsc --noEmit
 npm run build
 ```
 
-Current verified baseline:
+`npm test` runs `test:unit` (TypeScript + Node) followed by `test:browser` (Playwright).
+Use those individual scripts, or `npm run test:browser -- voice-chat.spec.ts`, for focused checks.
+Playwright is development-only. Windows defaults to installed Microsoft Edge; other
+platforms need `npx playwright install chromium`. Set `PLAYWRIGHT_CHANNEL` to use
+another installed supported browser. The runner starts port 3000 or reuses its local
+dev server, but always uses isolated browser contexts, never an existing report tab.
+Do not run it against a demo-only server on that port.
 
-- 80 backend tests passing (one existing Starlette/AnyIO deprecation warning)
-- 21 deterministic frontend tests with TypeScript and Node's built-in test runner; no additional test dependencies
+Browser fixtures are synthetic and block unhandled API requests. Upload/AI/map/speech
+boundaries are mocked; the demo journey runs without API calls. Reports, screenshots
+and replayable render-cadence measurements are generated under ignored
+`frontend/playwright-report` and `frontend/test-results` directories. The visual
+evidence test measures WebGL clear cadence, not GPU execution time.
+
+Current local verification:
+
+- 85 backend tests passing (one existing Starlette/AnyIO deprecation warning)
+- 21 deterministic frontend unit tests
+- 26 Playwright browser tests, including visual/performance evidence
 - Frontend lint passing without warnings
-- Next.js production build passing
-- Live Gemini and PostgreSQL integration are not exercised by these local regression checks
+- Type-check and both normal/demo-only Next.js production builds passing
+- Live Gemini, real microphone/speaker devices, PostgreSQL/pgvector, Safari/Firefox,
+  physical mobile hardware and professional localization are not exercised
+
+The dependency audit during this pass reported **21 advisories: 1 critical, 4 high,
+16 moderate**, including a direct Next.js advisory. Dependency remediation and a
+fresh audit are release gates; these passing local checks are not production approval.
+No forced dependency upgrades or provider/model fallbacks were added.
 
 ## Multilingual Support
 
@@ -351,6 +378,9 @@ Medical translations in a production system would require professional review.
 ## Nearby Care
 
 The nearby-care page requests browser location permission and queries OpenStreetMap/Overpass for healthcare facilities within 10 km. It displays available names, addresses, phone numbers, specialties, websites, and distances.
+
+Permission denial and lookup failures remain visible with a manual retry. Navigating
+away aborts owned lookups; no placeholder facilities are fabricated on failure.
 
 OpenStreetMap does not provide dependable doctor ratings or review text. The UI therefore links to an external map search for reviews instead of displaying fabricated scores. Report-derived specialty labels are discussion aids, not referrals.
 
@@ -371,14 +401,15 @@ The frontend-only synthetic demo is the release scope of this pass, **not approv
 
 | Priority / release gate | Gap | Required follow-up |
 |---|---|---|
+| Before publishing the demo | Dependency audit has critical/high advisories | Apply reviewed patched versions, rerun the audit and full local/browser/build checks. Do not interpret this dependency inventory as an exploitability assessment. |
 | Before publishing the demo | Hosting and third-party rights are unverified | Deploy the demo-only build over HTTPS; review notices, asset/corpus redistribution rights, privacy copy, and actual deployed network behavior. Do not expose the backend or bundle keys. |
 | Before exposing any AI endpoint | No identity/access controls, request quotas, cost ceilings, or abuse controls | Add server-side authentication or a gated pilot, per-user/IP limits, request/token budgets, provider deadlines, and spend alerts. CORS is not authentication. |
 | Before trusting uploaded reports | Evidence heuristics verify excerpts/tokens but do not fully establish every extracted field; client confirmation/status is request data | Benchmark field-level and page/quote accuracy against versioned golden fixtures. Strengthen local evidence-span matching and server-side validation/recalculation; design verifiable review state before persisting or sharing reports. |
 | Before enabling broad RAG access | Quote presence and lexical overlap do not prove claim entailment; vector tests do not cover a live database | Evaluate unsupported-claim/refusal rates, multilingual grounding, and document coverage. Add deterministic retrieval cases and real pgvector integration tests; version and audit the licensed knowledge corpus. |
 | Before accepting larger traffic | PDF/OCR work is synchronous in the upload flow; the 10 MB limit is not a page/CPU/token budget | Set page, pixel, processing-time and context limits; isolate CPU work from the API event loop, bound concurrency, and make timeout/retry behavior explicit. Measure extraction and response p95 latency. |
 | Before real medical data | No report lifecycle, de-identification pipeline, or reviewed privacy/compliance design | Establish consent, identifier handling, data minimization, encryption, access/audit policy, retention/deletion, vendor agreements, and jurisdiction-specific legal review before adding storage. |
-| Before claiming reliable accessibility/localization | Labels and educational content are only partly localized; dialogs and review-table usability need a full audit | Complete dictionaries, error/loading translations, focus management, screen-reader/keyboard tests, RTL/mobile flows, and professional medical-language review. Atlas-specific copy is currently English. |
-| Before a full workflow release | Frontend helper tests and backend mocks do not cover end-to-end integrations or deployment operations | Add CI gates, replayable synthetic upload/review/chat/OCR flows, provider contract tests, database readiness checks, redacted structured logs, error monitoring, cost/latency dashboards, backups and rollback drills where storage is deployed. |
+| Before claiming reliable accessibility/localization | Labels and educational content are only partly localized; automated focus/RTL/mobile checks are not a full assistive-technology audit | Complete dictionaries and error/loading translations; validate screen readers, review-table usability and real-device flows; obtain professional medical-language review. Atlas-specific copy is currently English. |
+| Before a full workflow release | Browser regressions and backend mocks do not cover live provider/database integrations or deployment operations | Add CI gates, live synthetic provider/OCR contract tests, database readiness checks, redacted structured logs, error monitoring, cost/latency dashboards, backups and rollback drills where storage is deployed. |
 | Later visual refinement | Internal organs are schematic; the local skin model is still about 4.9 MB | Validate low-end mobile GPU behavior and asset budgets. Optimize or decimate a properly attributed derived model, and commission licensed organ meshes if user research justifies the download/rendering cost. Avoid heavier effects until measured. |
 
 ## Roadmap

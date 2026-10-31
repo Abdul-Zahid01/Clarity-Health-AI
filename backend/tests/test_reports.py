@@ -1,6 +1,8 @@
 import json
 
 import pymupdf
+import pytesseract
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -53,6 +55,52 @@ def test_rejects_non_pdf_upload() -> None:
 
     assert response.status_code == 415
     assert response.json()["detail"] == "Only PDF files are supported."
+
+
+@pytest.mark.parametrize(
+    ("contents", "expected_status", "message"),
+    [
+        (b"not PDF content", 400, "valid PDF signature"),
+        (b"%PDF-1.4 corrupt synthetic fixture", 400, "not a readable PDF"),
+        (b"%PDF-" + b"0" * (10 * 1024 * 1024), 413, "10 MB or smaller"),
+    ],
+    ids=["invalid-signature", "corrupt-pdf", "oversized-pdf"],
+)
+def test_rejects_invalid_and_oversized_pdf(contents, expected_status, message) -> None:
+    response = client.post(
+        "/api/reports/extract",
+        files={"file": ("synthetic-invalid.pdf", contents, "application/pdf")},
+    )
+    assert response.status_code == expected_status
+    assert message in response.json()["detail"]
+
+
+def test_rejects_password_protected_pdf() -> None:
+    document = pymupdf.open()
+    document.new_page().insert_text((72, 72), "Synthetic laboratory fixture")
+    contents = document.tobytes(
+        encryption=pymupdf.PDF_ENCRYPT_AES_256,
+        owner_pw="synthetic-owner", user_pw="synthetic-reader",
+    )
+    document.close()
+    response = client.post(
+        "/api/reports/extract",
+        files={"file": ("synthetic-protected.pdf", contents, "application/pdf")},
+    )
+    assert response.status_code == 400
+    assert "Password-protected" in response.json()["detail"]
+
+
+def test_missing_ocr_executable_returns_actionable_error(monkeypatch) -> None:
+    def unavailable(_image):
+        raise pytesseract.TesseractNotFoundError()
+    monkeypatch.setattr("app.pdf_parser.pytesseract.image_to_string", unavailable)
+    response = client.post(
+        "/api/reports/extract",
+        files={"file": ("synthetic-scan.pdf", create_pdf([""]), "application/pdf")},
+    )
+    assert response.status_code == 400
+    assert "Install the Tesseract OCR executable" in response.json()["detail"]
 
 
 def test_explains_when_pdf_has_no_selectable_text() -> None:

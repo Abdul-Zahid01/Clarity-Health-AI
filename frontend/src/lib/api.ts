@@ -39,11 +39,12 @@ export async function structureReport(file: File, reviewedPages: ExtractedPage[]
   return response.json() as Promise<StructuredReport>;
 }
 
-export async function askAboutResult(result: LabResult, question: string, history: ChatMessage[], language: Language): Promise<ResultAnswer> {
+export async function askAboutResult(result: LabResult, question: string, history: ChatMessage[], language: Language, signal?: AbortSignal): Promise<ResultAnswer> {
   const response = await fetch(`${API_URL}/api/results/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ result, question, history: history.slice(-8), language }),
+    signal,
   });
 
   if (!response.ok) {
@@ -54,11 +55,12 @@ export async function askAboutResult(result: LabResult, question: string, histor
   return response.json() as Promise<ResultAnswer>;
 }
 
-export async function askAboutReport(results: LabResult[], question: string, history: ChatMessage[], language: Language): Promise<ReportAnswer> {
+export async function askAboutReport(results: LabResult[], question: string, history: ChatMessage[], language: Language, signal?: AbortSignal): Promise<ReportAnswer> {
   const response = await fetch(`${API_URL}/api/reports/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ results, question, history: history.slice(-8), language }),
+    signal,
   });
 
   if (!response.ok) {
@@ -69,23 +71,25 @@ export async function askAboutReport(results: LabResult[], question: string, his
   return response.json() as Promise<ReportAnswer>;
 }
 
-export async function translateTexts(texts: string[], language: Language): Promise<string[]> {
+export async function translateTexts(texts: string[], language: Language, signal?: AbortSignal): Promise<string[]> {
   if (language === "en") return texts;
   const response = await fetch(`${API_URL}/api/translate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ texts, language }),
+    signal,
   });
   if (!response.ok) throw new Error("Translation is temporarily unavailable.");
   const payload = await response.json() as { texts: string[] };
   return payload.texts;
 }
 
-export async function askRagAssistant(results: LabResult[], question: string, history: ChatMessage[], language: Language): Promise<RagAnswer> {
+export async function askRagAssistant(results: LabResult[], question: string, history: ChatMessage[], language: Language, signal?: AbortSignal): Promise<RagAnswer> {
   const response = await fetch(`${API_URL}/api/rag/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ results, question, history: history.slice(-8), language }),
+    signal,
   });
 
   if (!response.ok) {

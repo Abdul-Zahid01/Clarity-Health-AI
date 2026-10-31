@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsc -p tests/tsconfig.json && node --test .test-build/tests/report-behavior.test.js"
+    "test": "npm run test:unit && npm run test:browser",
+    "test:unit": "tsc -p tests/tsconfig.json && node --test .test-build/tests/report-behavior.test.js",
+    "test:browser": "playwright test"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",
@@ -21,6 +23,7 @@
     "three": "^0.186.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@tailwindcss/postcss": "^4",
     "@types/leaflet": "^1.9.22",
     "@types/node": "^20",

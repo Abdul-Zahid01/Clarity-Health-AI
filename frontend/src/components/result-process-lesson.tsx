@@ -27,6 +27,26 @@ function BloodCells({ white = false, platelets = false }: { white?: boolean; pla
 }
 
 function OrganGraphic({ kind }: { kind: LessonKind }) {
+  if (kind === "hba1c") return <g>
+    {[60, 100, 140].map((x) => <path key={x} className="lesson-particle" d={`M${x} 125l12 8v14l-12 8-12-8v-14Z`} fill="#deb359" stroke="#9c732b" strokeWidth="2" />)}
+    <text x="100" y="218" textAnchor="middle">Glucose</text>
+    <path className="lesson-flow" d="M173 140h50m167 0h50" stroke="#a37635" strokeWidth="4" strokeDasharray="8 8" />
+    <ellipse cx="300" cy="140" rx="62" ry="39" fill="#b94350" /><ellipse cx="300" cy="140" rx="31" ry="18" fill="#e6a1a3" />
+    {[270, 299, 328].map((x) => <circle key={x} cx={x} cy="130" r="7" fill="#edc461" />)}
+    <text x="300" y="218" textAnchor="middle">Hemoglobin / magnified</text>
+    <circle cx="505" cy="140" r="42" fill="#f3e9d8" stroke="#b48a47" strokeWidth="3" /><text x="505" y="145" textAnchor="middle">HbA1c %</text>
+    <text x="505" y="218" textAnchor="middle">Over time</text>
+  </g>;
+  if (kind === "bilirubin") return <g>
+    <ellipse cx="85" cy="115" rx="30" ry="19" fill="#b94350" /><ellipse cx="85" cy="115" rx="14" ry="8" fill="#e6a1a3" />
+    {[65, 85, 105].map((x) => <circle key={x} className="lesson-particle" cx={x} cy="167" r="6" fill="#cfaa4c" />)}
+    <text x="85" y="228" textAnchor="middle">Heme recycling</text>
+    <path className="lesson-flow" d="M137 145h82m161 0h68" stroke="#b89b40" strokeWidth="4" strokeDasharray="8 8" />
+    <path d="M240 115q55-65 125-10l-18 65-77 12q-48-4-30-67Z" fill="#985248" stroke="#713e37" strokeWidth="3" />
+    <text x="300" y="228" textAnchor="middle">Liver / conjugation</text>
+    <path d="M490 90v95q15 22 35 0V90" fill="#e4c770" stroke="#ab8b36" strokeWidth="3" />
+    <text x="505" y="228" textAnchor="middle">Bilirubin fractions</text>
+  </g>;
   if (kind === "thyroid") return <g>
     <path d="M55 100q-10-42 32-42 44 0 34 40-12 30-33 20-30 12-33-18Z" fill="#dfb1bd" stroke="#ad7688" strokeWidth="2" />
     <circle cx="90" cy="117" r="8" fill="#ad5787" /><text x="90" y="158" textAnchor="middle">Pituitary</text>
@@ -57,11 +77,11 @@ function OrganGraphic({ kind }: { kind: LessonKind }) {
     <path d="M500 148q-50 64-1 68 48-4 1-68Z" fill="#e4bd5d" /><text x="505" y="249" textAnchor="middle">Urine</text>
   </g>;
   if (kind === "glucose") return <g>
-    <path d="M40 143q40-52 90-14-30 35-84 30Z" fill="#d8ae6d" stroke="#b38b51" strokeWidth="3" /><text x="90" y="215" textAnchor="middle">Pancreas</text>
+    {[55, 95, 135].map((x) => <path key={x} className="lesson-particle" d={`M${x} 120l12 8v14l-12 8-12-8v-14Z`} fill="#e1b865" stroke="#aa7d31" />)}<text x="95" y="215" textAnchor="middle">Blood glucose</text>
     <path className="lesson-flow" d="M140 145h74m178 0h53" stroke="#508c7d" strokeWidth="4" strokeDasharray="8 8" />
-    {[250, 295, 340].map((x) => <g key={x} className="lesson-particle"><path d={`M${x} 117l14 8v17l-14 8-14-8v-17Z`} fill="#e1b865" stroke="#aa7d31" /></g>)}
-    <text x="295" y="210" textAnchor="middle">Circulating glucose</text>
-    <circle cx="505" cy="145" r="45" fill="#dcebe3" stroke="#74a28b" strokeWidth="3" /><path d="M460 122h-12v43h12" fill="none" stroke="#316e60" strokeWidth="5" /><text x="505" y="150" textAnchor="middle">Cell</text><text x="182" y="122" textAnchor="middle">Insulin</text>
+    <path d="M245 143q40-52 90-14-30 35-84 30Z" fill="#d8ae6d" stroke="#b38b51" strokeWidth="3" />
+    <text x="295" y="210" textAnchor="middle">Pancreas / insulin</text>
+    <circle cx="505" cy="145" r="45" fill="#dcebe3" stroke="#74a28b" strokeWidth="3" /><path d="M460 122h-12v43h12" fill="none" stroke="#316e60" strokeWidth="5" /><text x="505" y="150" textAnchor="middle">Cell</text>
   </g>;
   if (kind === "liver" || kind === "lipids") return <g>
     <path d="M45 115q50-65 115-10l-18 65-77 12q-48-4-20-67Z" fill="#985248" stroke="#713e37" strokeWidth="3" /><text x="105" y="227" textAnchor="middle">Liver</text>
@@ -104,7 +124,7 @@ export function ResultProcessLesson({ result }: { result: LabResult }) {
     const timer = window.setInterval(() => setStep((current) => (current + 1) % 3), 4500);
     return () => window.clearInterval(timer);
   }, [running]);
-  return <section ref={container} data-lesson={lesson.kind} data-running={running} className="result-lesson overflow-hidden rounded-2xl border border-[var(--line)] bg-white" aria-label={`How ${result.name} relates to the body`}>
+  return <section ref={container} lang="en" dir="ltr" data-lesson={lesson.kind} data-running={running} className="result-lesson overflow-hidden rounded-2xl border border-[var(--line)] bg-white" aria-label={`How ${result.name} relates to the body`}>
     <div className="border-b border-[var(--line)] p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-teal-700">Understand the process / {result.name}</p><h3 className="font-display mt-1 text-xl font-semibold">{lesson.title}</h3></div>
     <svg viewBox="0 0 610 285" role="img" aria-labelledby={titleId} className="w-full bg-[#f7f5ef] text-[13px] text-zinc-700"><title id={titleId}>{lesson.title}. {lesson.steps.join(" → ")}. Schematic, not a representation of your body.</title><rect aria-hidden="true" x={[15, 215, 435][step]} y="28" width="165" height="235" rx="18" fill="#147d7309" stroke="#147d7360" strokeDasharray="4 5" /><OrganGraphic kind={lesson.kind} /></svg>
     <div className="p-4">

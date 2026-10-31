@@ -119,7 +119,7 @@ describe("educational content routing", () => {
     assert.deepEqual(getResultAnatomy(glucose({ name: "eGFR" })).regions, ["kidneys"]);
   });
   it("chooses distinct explanatory scenes, not one repeated human silhouette", () => {
-    const cases = { Hemoglobin: "red-cells", WBC: "immune", Platelets: "platelets", Creatinine: "kidney", Glucose: "glucose", ALT: "liver", TSH: "thyroid", Troponin: "heart", LDL: "lipids", Calcium: "bone", "Vitamin B12": "nerves", "Unmapped test": "sample", HbA1c: "red-cells" };
+    const cases = { Hemoglobin: "red-cells", WBC: "immune", Platelets: "platelets", Creatinine: "kidney", Glucose: "glucose", ALT: "liver", TSH: "thyroid", Troponin: "heart", LDL: "lipids", Calcium: "bone", "Vitamin B12": "nerves", "Unmapped test": "sample", HbA1c: "hba1c", "Serum Bilirubin (Indirect)": "bilirubin" };
     for (const [name, kind] of Object.entries(cases)) {
       const lesson = getResultLesson(glucose({ name }));
       assert.equal(lesson.kind, kind);

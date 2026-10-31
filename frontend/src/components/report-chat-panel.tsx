@@ -5,6 +5,8 @@ import { Bot, ExternalLink, FileCheck2, LoaderCircle, Maximize2, Minimize2, Send
 
 import { askAboutReport, askRagAssistant } from "@/lib/api";
 import { RagVoiceControls } from "@/components/rag-voice-controls";
+import { useDialogFocus } from "@/lib/use-dialog-focus";
+import { useAssistantRequest } from "@/lib/use-assistant-request";
 import { languageDirection, translate } from "@/lib/ui-language";
 import type { ChatMessage, LabResult, Language, RagAnswer, RagSource, ReferenceLink, ReportAnswer } from "@/types/report";
 
@@ -42,20 +44,15 @@ export function ReportChatPanel({ results, language, onClose }: { results: LabRe
       error: null,
     },
   });
-  const [isAsking, setIsAsking] = useState(false);
+  const request = useAssistantRequest();
+  const isAsking = request.busy;
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceSpeaking, setVoiceSpeaking] = useState(false);
+  const dialog = useDialogFocus(onClose, isFullscreen);
   const conversation = useRef<HTMLDivElement>(null);
   const activeState = assistantStates[assistantMode];
   const latestAnswer = [...activeState.messages].reverse().find((message) => message.role === "assistant")?.content;
-
-  useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [onClose]);
 
   useEffect(() => {
     const element = conversation.current;
@@ -93,42 +90,47 @@ export function ReportChatPanel({ results, language, onClose }: { results: LabRe
     event?.preventDefault();
     const mode = assistantMode;
     const nextQuestion = (suggestedQuestion ?? questions[mode]).trim();
-    if (!nextQuestion || isAsking || voiceListening) return;
+    if (!nextQuestion || isAsking || voiceListening || voiceSpeaking) return;
+    const controller = request.begin();
+    if (!controller) return;
     const history = assistantStates[mode].messages.map(({ role, content }) => ({ role, content }));
     updateAssistantState(mode, {
       messages: [...assistantStates[mode].messages, { role: "user", content: nextQuestion }],
       error: null,
     });
-    setQuestions((current) => ({ ...current, [mode]: "" }));
-    setIsAsking(true);
+    setQuestions((current) => ({ ...current, [mode]: nextQuestion }));
     try {
       if (mode === "report") {
-        const response = await askAboutReport(results, nextQuestion, history, language);
+        const response = await askAboutReport(results, nextQuestion, history, language, controller.signal);
+        if (controller.signal.aborted) return;
         appendMessage(mode, { role: "assistant", content: response.answer, citedResultNames: evidenceFor(response), references: response.references });
         updateAssistantState(mode, {
           suggestions: response.suggested_questions,
           safetyNote: response.safety_note,
         });
       } else {
-        const response = await askRagAssistant(results, nextQuestion, history, language);
+        const response = await askRagAssistant(results, nextQuestion, history, language, controller.signal);
+        if (controller.signal.aborted) return;
         appendMessage(mode, { role: "assistant", content: response.answer, sources: sourcesFor(response) });
         updateAssistantState(mode, {
           suggestions: response.suggested_questions,
           safetyNote: response.safety_note,
         });
       }
+      setQuestions((current) => ({ ...current, [mode]: "" }));
     } catch (requestError) {
+      if (controller.signal.aborted) return;
       updateAssistantState(mode, {
         error: requestError instanceof Error ? requestError.message : "The assistant could not answer right now.",
       });
     } finally {
-      setIsAsking(false);
+      request.finish(controller);
     }
   }
 
   return (
     <div className={`fixed inset-0 z-50 flex justify-end ${isFullscreen ? "bg-[var(--background)]" : "pointer-events-none bg-transparent"}`} role="presentation">
-      <aside dir={languageDirection(language)} role="dialog" aria-modal="false" aria-labelledby="report-chat-title" className={`report-chat pointer-events-auto flex min-h-0 min-w-0 flex-col overflow-hidden border border-[var(--line)] bg-[var(--background)] shadow-2xl ${isFullscreen ? "h-dvh w-full" : "absolute bottom-2 end-2 h-[min(760px,calc(100dvh-1rem))] w-[min(460px,calc(100%_-_1rem))] rounded-2xl sm:bottom-4 sm:end-4 sm:h-[min(760px,calc(100dvh-2rem))] sm:w-[min(460px,calc(100%_-_2rem))]"}`}>
+      <aside ref={dialog} tabIndex={-1} dir={languageDirection(language)} role="dialog" aria-modal={isFullscreen} aria-labelledby="report-chat-title" className={`report-chat pointer-events-auto flex min-h-0 min-w-0 flex-col overflow-hidden border border-[var(--line)] bg-[var(--background)] shadow-2xl ${isFullscreen ? "h-dvh w-full" : "absolute bottom-2 end-2 h-[min(760px,calc(100dvh-1rem))] w-[min(460px,calc(100%_-_1rem))] rounded-2xl sm:bottom-4 sm:end-4 sm:h-[min(760px,calc(100dvh-2rem))] sm:w-[min(460px,calc(100%_-_2rem))]"}`}>
         <header className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] bg-white px-4 py-3">
           <div className="flex min-w-0 items-center gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[var(--ink)] text-white"><Bot className="size-5" /></span><div className="min-w-0"><p className="truncate text-[10px] font-bold uppercase tracking-wide text-[var(--teal)]">{assistantMode === "report" ? translate(language, "reportAssistant") : "RAG assistant"}</p><h2 id="report-chat-title" className="font-display text-xl font-semibold text-[var(--ink)]">{translate(language, "askClarity")}</h2></div></div>
           <div className="flex gap-1"><button type="button" onClick={() => setIsFullscreen((current) => !current)} title={isFullscreen ? "Restore chat size" : "Open chat full screen"} className="grid size-10 place-items-center border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50">{isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}<span className="sr-only">{isFullscreen ? "Restore chat size" : "Open chat full screen"}</span></button><button type="button" onClick={onClose} title="Close report assistant" className="grid size-10 place-items-center border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"><X className="size-5" /><span className="sr-only">Close report assistant</span></button></div>
@@ -157,12 +159,13 @@ export function ReportChatPanel({ results, language, onClose }: { results: LabRe
           {!isAsking && activeState.suggestions.length > 0 && <details open={activeState.messages.length === 0} className="rounded-xl border border-[var(--line)] bg-white p-3"><summary className="cursor-pointer text-xs font-semibold text-teal-800">Suggested questions</summary><div className="mt-3 grid gap-2">{activeState.suggestions.map((suggestion) => <button key={suggestion} type="button" onClick={() => void submitQuestion(undefined, suggestion)} className="rounded-lg border border-zinc-200 px-3 py-2 text-start text-xs leading-5 text-zinc-700 hover:border-teal-700 [overflow-wrap:anywhere]">{suggestion}</button>)}</div></details>}
           <details className="text-xs leading-5 text-zinc-500"><summary className="cursor-pointer">Educational limits</summary><p className="mt-2 [overflow-wrap:anywhere]">{activeState.safetyNote}</p></details>
           {activeState.error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 [overflow-wrap:anywhere]">{activeState.error}</p>}
-          {assistantMode === "rag" && <RagVoiceControls key={language} language={language} draft={questions.rag} onDraftChange={(text) => setQuestions((current) => ({ ...current, rag: text }))} answer={latestAnswer ? `${latestAnswer}\n${activeState.safetyNote}` : ""} busy={isAsking} onListeningChange={setVoiceListening} />}
+          {request.notice && <p role="status" className="text-xs text-teal-900">{request.notice}</p>}
+          {assistantMode === "rag" && <RagVoiceControls key={language} language={language} draft={questions.rag} onDraftChange={(text) => setQuestions((current) => ({ ...current, rag: text }))} answer={latestAnswer ? `${latestAnswer}\n${activeState.safetyNote}` : ""} busy={isAsking} onListeningChange={setVoiceListening} onSpeakingChange={setVoiceSpeaking} />}
           </div>
         </div>
 
         <div className="shrink-0 border-t border-[var(--line)] bg-white p-3">
-          <form onSubmit={(event) => void submitQuestion(event)} className="mx-auto flex max-w-3xl items-end gap-2"><label htmlFor="report-question" className="sr-only">Ask about your confirmed report</label><textarea id="report-question" value={questions[assistantMode]} disabled={voiceListening} onChange={(event) => setQuestions((current) => ({ ...current, [assistantMode]: event.target.value }))} placeholder="Ask about your confirmed results…" rows={2} maxLength={1000} className="min-h-16 min-w-0 flex-1 resize-none rounded-xl border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-teal-700 disabled:bg-zinc-50" /><button type="submit" disabled={!questions[assistantMode].trim() || isAsking || voiceListening} title="Send report question" className="grid size-11 shrink-0 place-items-center rounded-xl bg-[var(--ink)] text-white hover:bg-teal-700 disabled:opacity-40"><Send className="size-4" /><span className="sr-only">Send report question</span></button></form>
+          <form onSubmit={(event) => void submitQuestion(event)} className="mx-auto flex max-w-3xl items-end gap-2"><label htmlFor="report-question" className="sr-only">Ask about your confirmed report</label><textarea id="report-question" value={questions[assistantMode]} disabled={voiceListening || isAsking} onChange={(event) => setQuestions((current) => ({ ...current, [assistantMode]: event.target.value }))} placeholder="Ask about your confirmed results…" rows={2} maxLength={1000} className="min-h-16 min-w-0 flex-1 resize-none rounded-xl border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-teal-700 disabled:bg-zinc-50" />{isAsking ? <button key="stop" type="button" onClick={(event) => { event.preventDefault(); request.cancel(); }} className="min-h-11 rounded-xl border border-teal-700 px-3 text-xs font-semibold text-teal-900">Stop request</button> : <button key="send" type="submit" disabled={!questions[assistantMode].trim() || voiceListening || voiceSpeaking} title="Send report question" className="grid size-11 shrink-0 place-items-center rounded-xl bg-[var(--ink)] text-white hover:bg-teal-700 disabled:opacity-40"><Send className="size-4" /><span className="sr-only">Send report question</span></button>}</form>
           <p className="mt-2 flex items-center justify-center gap-1.5 text-[10px] text-zinc-500"><ShieldAlert className="size-3 shrink-0" />Education only. Not a diagnosis or treatment advice.</p>
         </div>
       </aside>

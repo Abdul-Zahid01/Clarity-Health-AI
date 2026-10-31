@@ -162,9 +162,9 @@ export function ReportDashboard({ report, onReview, onReset, isDemo = false }: {
           </div>
         </div>
       </div>
-      {selectedResult && <ResultDetailPanel key={`${selectedResult.name}-${selectedResult.source_page}`} result={selectedResult} language={language} allowAssistant={!isDemo} onClose={() => setSelectedResult(null)} />}
+      {selectedResult && <ResultDetailPanel key={`${selectedResult.name}-${selectedResult.source_page}-${language}`} result={selectedResult} language={language} allowAssistant={!isDemo} onClose={() => setSelectedResult(null)} />}
       {!isDemo && <button type="button" onClick={() => setReportChatOpen(true)} className="fixed bottom-5 right-5 z-40 inline-flex h-12 items-center gap-2 bg-[var(--ink)] px-4 text-sm font-semibold text-white shadow-xl hover:bg-teal-700 sm:bottom-8 sm:right-8"><Bot className="size-5" />{translate(language, "askReport")}</button>}
-      {reportChatOpen && !isDemo && <ReportChatPanel results={report.results} language={language} onClose={() => setReportChatOpen(false)} />}
+      {reportChatOpen && !isDemo && <ReportChatPanel key={language} results={report.results} language={language} onClose={() => setReportChatOpen(false)} />}
     </section>
   );
 }
