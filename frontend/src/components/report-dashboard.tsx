@@ -13,13 +13,6 @@ import { ResultDetailPanel } from "@/components/result-detail-panel";
 
 type StatusFilter = "all" | ResultStatus;
 
-const statusLabels: Record<ResultStatus, string> = {
-  high: "High",
-  low: "Low",
-  normal: "In range",
-  unknown: "No range",
-};
-
 function localizedStatus(language: Language, status: ResultStatus) {
   if (status === "normal") return translate(language, "inRange");
   if (status === "high") return translate(language, "high");
@@ -67,11 +60,11 @@ function RangePlot({ result, language }: { result: LabResult; language: Language
   );
 }
 
-export function ReportDashboard({ report, onReview, onReset }: { report: StructuredReport; onReview: () => void; onReset: () => void }) {
+export function ReportDashboard({ report, onReview, onReset, isDemo = false }: { report: StructuredReport; onReview: () => void; onReset: () => void; isDemo?: boolean }) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [search, setSearch] = useState("");
   const [selectedResult, setSelectedResult] = useState<LabResult | null>(null);
-  const [anatomyResult, setAnatomyResult] = useState<LabResult>(report.results[0]);
+  const [anatomyResult, setAnatomyResult] = useState<LabResult | null>(report.results[0] ?? null);
   const [reportChatOpen, setReportChatOpen] = useState(false);
   const [language, setLanguage] = useState<Language>("en");
   const deferredSearch = useDeferredValue(search.trim().toLowerCase());
@@ -98,8 +91,13 @@ export function ReportDashboard({ report, onReview, onReset }: { report: Structu
     window.open("/nearby-care", "_blank", "noopener,noreferrer");
   }
 
+  if (!anatomyResult) {
+    return <section data-workspace-full className="p-6"><p>No confirmed results are available.</p><button type="button" onClick={onReview} className="mt-4 underline">Return to review</button></section>;
+  }
+
   return (
     <section dir={languageDirection(language)} data-workspace-full className="min-w-0 lg:col-span-2">
+      {isDemo && <p className="mb-5 rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm text-teal-900">You are exploring a synthetic demo. All values are authored fixtures. AI chat and cloud translation are disabled. The full upload-and-AI workflow requires a separately configured private backend.</p>}
       <div className="flex flex-wrap items-start justify-between gap-5 border-b border-[var(--line)] pb-6">
         <div>
           <p className="text-xs font-bold uppercase text-[var(--teal)]">Phase 3 · {translate(language, "dashboard")}</p>
@@ -120,7 +118,7 @@ export function ReportDashboard({ report, onReview, onReset }: { report: Structu
             <p className="text-xs font-bold uppercase text-[var(--teal)]">{translate(language, "bodyMap")}</p>
             <p className="mt-1 text-sm text-[var(--muted)]">{translate(language, "selected")}: <strong className="text-[var(--ink)]">{anatomyResult.name}</strong></p>
           </div>
-          <div className="mb-3 flex items-center justify-between border border-[var(--line)] bg-white px-3 py-2"><div><p className="text-[10px] font-bold uppercase text-[var(--muted)]">{translate(language, "healthRating")}</p><p className="mt-0.5 text-2xl font-semibold text-[var(--ink)]">{healthRating}<span className="text-sm text-[var(--muted)]">/100</span></p></div><p className="max-w-28 text-right text-[9px] leading-3 text-[var(--muted)]">{translate(language, "ratingNote")}</p></div>
+          <div className="mb-3 flex items-center justify-between border border-[var(--line)] bg-white px-3 py-2"><div><p className="text-[10px] font-bold uppercase text-[var(--muted)]">{translate(language, "healthRating")}</p><p className="mt-0.5 text-2xl font-semibold text-[var(--ink)]">{healthRating ?? translate(language, "noRange")}{healthRating !== null && <span className="text-sm text-[var(--muted)]">/100</span>}</p></div><p className="max-w-28 text-right text-[10px] leading-4 text-[var(--muted)]">{translate(language, "ratingNote")}</p></div>
           <AnatomicalBody anatomy={getResultAnatomy(anatomyResult)} />
         </aside>
         <div className="min-w-0">
@@ -136,7 +134,7 @@ export function ReportDashboard({ report, onReview, onReset }: { report: Structu
           <div className="mt-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex flex-wrap gap-1" aria-label="Filter results by status">
               {(["all", "normal", "high", "low", "unknown"] as StatusFilter[]).map((filter) => (
-                <button key={filter} type="button" onClick={() => setStatusFilter(filter)} className={`h-9 px-3 text-xs font-semibold ${statusFilter === filter ? "bg-[var(--ink)] text-white" : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"}`}>{filter === "all" ? translate(language, "all") : localizedStatus(language, filter)}{filter !== "all" && ` (${counts[filter]})`}</button>
+                <button key={filter} type="button" aria-pressed={statusFilter === filter} onClick={() => setStatusFilter(filter)} className={`h-9 px-3 text-xs font-semibold ${statusFilter === filter ? "bg-[var(--ink)] text-white" : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"}`}>{filter === "all" ? translate(language, "all") : localizedStatus(language, filter)}{filter !== "all" && ` (${counts[filter]})`}</button>
               ))}
             </div>
             <label className="relative block xl:w-56"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" /><span className="sr-only">{translate(language, "search")}</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={translate(language, "search")} className="h-10 w-full border border-zinc-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-teal-700" /></label>
@@ -150,8 +148,8 @@ export function ReportDashboard({ report, onReview, onReset }: { report: Structu
               <div className="mb-3 flex items-center justify-between"><h2 className="font-display text-xl font-semibold text-[var(--ink)]">{category}</h2><span className="text-xs text-[var(--muted)]">{categoryResults.length} {categoryResults.length === 1 ? "test" : "tests"}</span></div>
               <div className="grid gap-3 md:grid-cols-2">
                 {categoryResults.map((result, index) => (
-                  <article key={`${result.name}-${result.source_page}-${index}`} role="button" tabIndex={0} aria-label={`Show ${result.name} on body map`} onClick={() => setAnatomyResult(result)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setAnatomyResult(result); } }} className={`cursor-pointer border bg-white p-4 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-700 ${anatomyResult === result ? "border-teal-700 ring-1 ring-teal-700" : "border-zinc-200 hover:border-zinc-400"}`}>
-                    <div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-zinc-900">{result.name}</h3><p className="mt-1 text-xl font-semibold" style={{ color: statusColor(result.calculated_status) }}>{resultValue(result)}</p></div><span className="px-2 py-1 text-xs font-semibold" style={{ color: statusColor(result.calculated_status), backgroundColor: `${statusColor(result.calculated_status)}18` }}>{statusLabels[result.calculated_status]}</span></div>
+                  <article key={`${result.name}-${result.source_page}-${index}`} className={`border bg-white p-4 transition-colors ${anatomyResult === result ? "border-teal-700 ring-1 ring-teal-700" : "border-zinc-200 hover:border-zinc-400"}`}>
+                    <button type="button" aria-label={`Show ${result.name} on body map`} aria-pressed={anatomyResult === result} onClick={() => setAnatomyResult(result)} className="flex w-full items-start justify-between gap-3 text-start"><span><span className="block font-semibold text-zinc-900">{result.name}</span><span className="mt-1 block text-xl font-semibold" style={{ color: statusColor(result.calculated_status) }}>{resultValue(result)}</span></span><span className="px-2 py-1 text-xs font-semibold" style={{ color: statusColor(result.calculated_status), backgroundColor: `${statusColor(result.calculated_status)}18` }}>{localizedStatus(language, result.calculated_status)}</span></button>
                     <div className="mt-4"><RangePlot result={result} language={language} /></div>
                     <div className="mt-4 flex items-center justify-between gap-3 border-t border-zinc-100 pt-3"><details onClick={(event) => event.stopPropagation()}><summary className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-teal-700"><FileSearch className="size-3.5" />{translate(language, "evidence")} · page {result.source_page}</summary><p className="mt-2 text-xs leading-5 text-zinc-600">{result.source_text}</p></details><button type="button" onClick={(event) => { event.stopPropagation(); setAnatomyResult(result); setSelectedResult(result); }} className="inline-flex h-8 shrink-0 items-center gap-2 bg-[var(--ink)] px-3 text-xs font-semibold text-white hover:bg-teal-700"><BookOpen className="size-3.5" />{translate(language, "learn")}</button></div>
                   </article>
@@ -164,9 +162,9 @@ export function ReportDashboard({ report, onReview, onReset }: { report: Structu
           </div>
         </div>
       </div>
-      {selectedResult && <ResultDetailPanel result={selectedResult} language={language} onClose={() => setSelectedResult(null)} />}
-      <button type="button" onClick={() => setReportChatOpen(true)} className="fixed bottom-5 right-5 z-40 inline-flex h-12 items-center gap-2 bg-[var(--ink)] px-4 text-sm font-semibold text-white shadow-xl hover:bg-teal-700 sm:bottom-8 sm:right-8"><Bot className="size-5" />{translate(language, "askReport")}</button>
-      {reportChatOpen && <ReportChatPanel results={report.results} language={language} onClose={() => setReportChatOpen(false)} />}
+      {selectedResult && <ResultDetailPanel key={`${selectedResult.name}-${selectedResult.source_page}`} result={selectedResult} language={language} allowAssistant={!isDemo} onClose={() => setSelectedResult(null)} />}
+      {!isDemo && <button type="button" onClick={() => setReportChatOpen(true)} className="fixed bottom-5 right-5 z-40 inline-flex h-12 items-center gap-2 bg-[var(--ink)] px-4 text-sm font-semibold text-white shadow-xl hover:bg-teal-700 sm:bottom-8 sm:right-8"><Bot className="size-5" />{translate(language, "askReport")}</button>}
+      {reportChatOpen && !isDemo && <ReportChatPanel results={report.results} language={language} onClose={() => setReportChatOpen(false)} />}
     </section>
   );
 }

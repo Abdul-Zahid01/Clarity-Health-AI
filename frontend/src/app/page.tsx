@@ -1,6 +1,7 @@
 import { ReportUploader } from "@/components/report-uploader";
 
 export default function Home() {
+  const demoOnly = process.env.NEXT_PUBLIC_DEMO_ONLY === "true";
   return (
     <div className="min-h-screen">
       <header className="border-b border-[var(--line)] bg-white/90 backdrop-blur">
@@ -16,11 +17,11 @@ export default function Home() {
         <section className="workspace-intro pt-2">
           <p className="mb-4 text-xs font-bold uppercase text-[var(--teal)]">Report workspace</p>
           <h1 className="font-display max-w-lg text-4xl leading-[1.08] font-semibold text-[var(--ink)] sm:text-5xl">Make the details in your health report visible.</h1>
-          <p className="mt-6 max-w-md text-base leading-7 text-[var(--muted)]">Upload a text-based PDF to inspect its page-level extraction before analysis begins.</p>
+          <p className="mt-6 max-w-md text-base leading-7 text-[var(--muted)]">{demoOnly ? "Explore synthetic results, review their evidence, and discover how laboratory tests relate to body systems. No personal report needed." : "Upload a text-based PDF to inspect its page-level extraction before analysis begins, or explore a local synthetic demo."}</p>
           <div className="mt-10 grid max-w-md grid-cols-3 border-y border-[var(--line)] py-5">
-            <div><strong className="block text-sm text-[var(--ink)]">01</strong><span className="mt-1 block text-xs text-[var(--muted)]">Upload</span></div>
-            <div className="border-x border-[var(--line)] px-5"><strong className="block text-sm text-[var(--ink)]">02</strong><span className="mt-1 block text-xs text-[var(--muted)]">Extract</span></div>
-            <div className="pl-5"><strong className="block text-sm text-[var(--ink)]">03</strong><span className="mt-1 block text-xs text-[var(--muted)]">Review</span></div>
+            <div><strong className="block text-sm text-[var(--ink)]">01</strong><span className="mt-1 block text-xs text-[var(--muted)]">{demoOnly ? "Explore" : "Upload"}</span></div>
+            <div className="border-x border-[var(--line)] px-5"><strong className="block text-sm text-[var(--ink)]">02</strong><span className="mt-1 block text-xs text-[var(--muted)]">{demoOnly ? "Review" : "Extract"}</span></div>
+            <div className="pl-5"><strong className="block text-sm text-[var(--ink)]">03</strong><span className="mt-1 block text-xs text-[var(--muted)]">{demoOnly ? "Discover" : "Review"}</span></div>
           </div>
         </section>
         <ReportUploader />

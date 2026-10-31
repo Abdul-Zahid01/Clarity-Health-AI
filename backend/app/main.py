@@ -2,8 +2,10 @@ from typing import Annotated
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import TypeAdapter, ValidationError
 
 from app.pdf_parser import PDFExtractionError, extract_pages
+from app.report_privacy import is_deletion_only, redact_report_pages
 from app.rag_assistant import (
     RagAssistantFailed,
     RagAssistantUnavailable,
@@ -17,6 +19,7 @@ from app.result_assistant import (
     translate_education,
 )
 from app.schemas import (
+    ExtractedPage,
     ReportAnswer,
     ReportExtractionResponse,
     ReportQuestionRequest,
@@ -87,11 +90,14 @@ async def extract_report(
             detail=str(error),
         ) from error
 
+    cloud_pages, removed_lines = redact_report_pages(pages)
     return ReportExtractionResponse(
         filename=file.filename or "report.pdf",
         page_count=len(pages),
         pages=pages,
         warnings=warnings,
+        cloud_pages=cloud_pages,
+        privacy_removed_lines=removed_lines,
     )
 
 
@@ -99,16 +105,42 @@ async def extract_report(
 async def structure_report(
     file: Annotated[UploadFile, File(description="A synthetic or de-identified PDF")],
     cloud_processing_allowed: Annotated[bool, Form()] = False,
+    privacy_review_confirmed: Annotated[bool, Form()] = False,
+    reviewed_pages: Annotated[str | None, Form()] = None,
 ) -> StructuredReport:
     if not cloud_processing_allowed:
+        await file.close()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Confirm that this report is synthetic or de-identified before AI processing.",
         )
 
-    extraction = await extract_report(file)
+    if not privacy_review_confirmed or reviewed_pages is None:
+        await file.close()
+        raise HTTPException(
+            status_code=400,
+            detail="Review the cloud text preview and confirm identifiers have been removed before AI processing.",
+        )
     try:
-        return await extract_structured_report(extraction.filename, extraction.pages)
+        selected_pages = TypeAdapter(list[ExtractedPage]).validate_json(reviewed_pages)
+    except ValidationError as error:
+        await file.close()
+        raise HTTPException(status_code=400, detail="The cloud text preview is invalid.") from error
+
+    extraction = await extract_report(file)
+    originals = {page.page_number: page for page in extraction.cloud_pages}
+    if (
+        len(selected_pages) != len(originals)
+        or {page.page_number for page in selected_pages} != set(originals)
+        or any(not is_deletion_only(originals[page.page_number].text, page.text) for page in selected_pages)
+        or not any(page.text.strip() for page in selected_pages)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Only remove text from the cloud preview; keep page numbers and laboratory values unchanged.",
+        )
+    try:
+        return await extract_structured_report(extraction.filename, selected_pages)
     except StructuredExtractionUnavailable as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

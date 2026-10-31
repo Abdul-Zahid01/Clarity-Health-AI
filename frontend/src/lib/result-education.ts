@@ -1,3 +1,5 @@
+import { isUrineResult, normalizeMarkerName } from "./result-anatomy";
+
 export type ResultEducation = {
   image: string;
   imageAlt: string;
@@ -71,7 +73,15 @@ function organEducation(image: string, imageAlt: string, overview: string, purpo
 
 const markerEducation: Array<{ matches: (name: string) => boolean; content: ResultEducation }> = [
   {
-    matches: (name) => name.includes("hematocrit") || name.includes("haematocrit") || name.includes("pcv"),
+    matches: (name) => /troponin|\b(?:nt pro ?bnp|bnp|ck mb)\b/.test(name),
+    content: organEducation("/medical/generic-lab.png", "Illustration of a laboratory sample", "Heart-related biomarkers are substances measured in blood to help assess heart muscle or cardiac workload. Different biomarkers answer different clinical questions.", "Clinicians interpret the specific test alongside symptoms, timing, repeat measurements, examination, and other investigations.", "An outside-range result has several possible explanations. It does not by itself diagnose a heart condition or determine its cause."),
+  },
+  {
+    matches: (name) => /hba1c|glycated|glycosylated/.test(name),
+    content: organEducation("/medical/hemoglobin.png", "Illustration of red blood cells containing hemoglobin", "HbA1c measures the proportion of hemoglobin with glucose attached. It gives context about blood glucose over roughly the preceding two to three months.", "It helps assess longer-term glucose patterns rather than the blood sugar at one moment. Red-cell lifespan and some hemoglobin variants can affect interpretation.", "An outside-range result should be reviewed with the laboratory method, other glucose measurements, and clinical context; it does not identify an affected organ."),
+  },
+  {
+    matches: (name) => name.includes("hematocrit") || name.includes("haematocrit") || /\b(?:pcv|hct)\b/.test(name),
     content: redCellEducation("Hematocrit, also called packed cell volume, is the percentage of blood volume made up of red blood cells.", "It helps assess the concentration of red blood cells and is usually interpreted beside hemoglobin and the red blood cell count."),
   },
   {
@@ -123,7 +133,7 @@ const markerEducation: Array<{ matches: (name: string) => boolean; content: Resu
     },
   },
   {
-    matches: (name) => name.includes("ast / alt") || name.includes("ast/alt"),
+    matches: (name) => name.includes("ast alt"),
     content: organEducation("/medical/liver.png", "Illustration of the liver", "The AST-to-ALT ratio compares two enzymes that can be released when cells are stressed or injured.", "Clinicians interpret the ratio only alongside the individual AST and ALT values, symptoms, medicines, and other liver-related tests.", "A ratio by itself does not diagnose liver disease, and it can be misleading when either underlying enzyme is within range or affected by non-liver tissues."),
   },
   {
@@ -155,7 +165,7 @@ const markerEducation: Array<{ matches: (name: string) => boolean; content: Resu
     content: organEducation("/medical/kidneys.png", "Illustration of the kidneys and urinary tract", "Creatinine is a waste product produced by normal muscle activity and filtered from blood by the kidneys.", "It is commonly used to estimate kidney filtration, often through a calculated eGFR, while considering age, muscle mass, and trends over time.", "A high value can suggest reduced filtration in the right context; a low value may reflect lower muscle mass or other factors. Interpretation depends on the person and trend."),
   },
   {
-    matches: (name) => name.includes("tsh") || name.includes("thyroid stimulating"),
+    matches: (name) => /\btsh\b|thyroid stimulating|thyrotropin/.test(name),
     content: organEducation("/medical/thyroid.png", "Illustration of the thyroid gland", "TSH is a hormone made by the pituitary gland that signals the thyroid to make thyroid hormones.", "It is a common first-line test of thyroid regulation and is often interpreted with free T4, symptoms, medicines, and pregnancy status where relevant.", "High or low TSH can reflect several thyroid and non-thyroid situations. A boundary value or single measurement usually needs clinical context and sometimes repeat testing."),
   },
 ];
@@ -184,18 +194,16 @@ const urineEducation: Record<string, ResultEducation> = {
 const genericUrine = organEducation("/medical/urinalysis.png", "Illustration of a urine sample and test strip", "This is part of a urinalysis, which examines the physical, chemical, or microscopic features of urine.", "Urinalysis helps screen for patterns involving hydration, the urinary tract, kidneys, liver, and metabolism.", "Results can be affected by collection, hydration, medicines, exercise, and contamination. Individual findings should be interpreted together, not in isolation.");
 
 export function getResultEducation(name: string, category?: string | null): ResultEducation {
-  const normalized = name.toLowerCase();
-  const normalizedCategory = category?.toLowerCase() ?? "";
-  const urineNames = ["colour", "color", "appearance", "specific gravity", "ph", "glucose", "protein", "ketones", "blood", "bilirubin", "urobilinogen", "nitrite", "pus cells", "rbc", "epithelial", "casts", "crystals", "bacteria"];
-  if (normalizedCategory.includes("clinical pathology") || normalizedCategory.includes("urine") || urineNames.some((item) => normalized === item || normalized.includes(`urine ${item}`))) {
+  const normalized = normalizeMarkerName(name);
+  if (isUrineResult(name, category)) {
     const specific = Object.entries(urineEducation).find(([key]) => normalized.includes(key));
     return specific?.[1] ?? genericUrine;
   }
-  if (normalized.includes("haemoglobin") || normalized.includes("hemoglobin")) return education.hemoglobin;
-  if (normalized.includes("white blood") || normalized.includes("wbc") || normalized.includes("tlc")) return education["white blood cells"];
   const marker = markerEducation.find((item) => item.matches(normalized));
   if (marker) return marker.content;
+  if (normalized.includes("haemoglobin") || normalized.includes("hemoglobin") || /^(hb|hgb)$/.test(normalized)) return education.hemoglobin;
+  if (normalized.includes("white blood") || /leu[ck]ocyte|\b(?:wbc|tlc)\b/.test(normalized)) return education["white blood cells"];
   if (normalized.includes("platelet")) return education.platelets;
-  if (normalized.includes("glucose")) return education.glucose;
+  if (normalized.includes("glucose") || /\b(?:fbs|rbs|ppbs)\b|blood sugar/.test(normalized)) return education.glucose;
   return fallback;
 }

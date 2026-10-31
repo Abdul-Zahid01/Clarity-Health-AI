@@ -1,6 +1,8 @@
 export type ExtractedPage = {
   page_number: number;
   text: string;
+  extraction_method: "native" | "tesseract";
+  needs_review: boolean;
 };
 
 export type ReportExtraction = {
@@ -8,6 +10,8 @@ export type ReportExtraction = {
   page_count: number;
   pages: ExtractedPage[];
   warnings: string[];
+  cloud_pages: ExtractedPage[];
+  privacy_removed_lines: number;
 };
 
 export type ResultStatus = "low" | "normal" | "high" | "unknown";

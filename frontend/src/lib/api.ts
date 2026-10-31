@@ -1,4 +1,4 @@
-import type { ChatMessage, LabResult, Language, RagAnswer, ReportAnswer, ReportExtraction, ResultAnswer, StructuredReport } from "@/types/report";
+import type { ChatMessage, ExtractedPage, LabResult, Language, RagAnswer, ReportAnswer, ReportExtraction, ResultAnswer, StructuredReport } from "@/types/report";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -19,10 +19,12 @@ export async function extractReport(file: File): Promise<ReportExtraction> {
   return response.json() as Promise<ReportExtraction>;
 }
 
-export async function structureReport(file: File): Promise<StructuredReport> {
+export async function structureReport(file: File, reviewedPages: ExtractedPage[]): Promise<StructuredReport> {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("cloud_processing_allowed", "true");
+  formData.append("privacy_review_confirmed", "true");
+  formData.append("reviewed_pages", JSON.stringify(reviewedPages));
 
   const response = await fetch(`${API_URL}/api/reports/structure`, {
     method: "POST",

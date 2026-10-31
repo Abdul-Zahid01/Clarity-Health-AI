@@ -15,6 +15,8 @@ class ReportExtractionResponse(BaseModel):
     page_count: int
     pages: list[ExtractedPage]
     warnings: list[str]
+    cloud_pages: list[ExtractedPage] = Field(default_factory=list)
+    privacy_removed_lines: int = 0
 
 
 ResultStatus = Literal["low", "normal", "high", "unknown"]

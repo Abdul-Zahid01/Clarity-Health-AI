@@ -1,7 +1,8 @@
 import type { LabResult } from "@/types/report";
 
 function resultScore(result: LabResult): number | null {
-  if (result.value_numeric === null || result.reference_min === null || result.reference_max === null || result.reference_max <= result.reference_min) return null;
+  if (result.review_status !== "confirmed" || result.value_numeric === null || result.reference_min === null || result.reference_max === null || result.reference_max <= result.reference_min) return null;
+  if (![result.value_numeric, result.reference_min, result.reference_max].every(Number.isFinite)) return null;
   const span = result.reference_max - result.reference_min;
   if (result.value_numeric >= result.reference_min && result.value_numeric <= result.reference_max) {
     const midpoint = (result.reference_min + result.reference_max) / 2;
@@ -12,7 +13,7 @@ function resultScore(result: LabResult): number | null {
   return Math.max(30, Math.round(90 - (outsideDistance / span) * 60));
 }
 
-export function calculateHealthRating(results: LabResult[]): number {
+export function calculateHealthRating(results: LabResult[]): number | null {
   const scores = results.map(resultScore).filter((score): score is number => score !== null);
-  return scores.length === 0 ? 100 : Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
+  return scores.length === 0 ? null : Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
 }

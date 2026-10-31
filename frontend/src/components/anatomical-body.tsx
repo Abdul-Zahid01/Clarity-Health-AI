@@ -1,117 +1,108 @@
 "use client";
 
-import { Canvas, useFrame } from "@react-three/fiber";
-import { Environment, Float, OrbitControls, useGLTF } from "@react-three/drei";
-import { useEffect, useRef } from "react";
-import * as THREE from "three";
+import dynamic from "next/dynamic";
+import { Component, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { ArrowLeft, ArrowRight, Pause, Play, RotateCcw, ScanLine } from "lucide-react";
 
-import type { BodyRegion, ResultAnatomy } from "@/lib/result-anatomy";
+import { bodyRegions, type ResultAnatomy } from "@/lib/result-anatomy";
 
-const HIGHLIGHT = "#f2b84b";
-const BONE = "#e8d8bd";
+const BodyScene = dynamic(() => import("@/components/body-atlas-scene").then((module) => module.BodyAtlasScene), {
+  ssr: false,
+  loading: () => <p role="status" className="atlas-message">Preparing the body atlas...</p>,
+});
 
-function active(regions: BodyRegion[], region: BodyRegion) {
-  return regions.includes(region);
+function subscribeMotion(callback: () => void) {
+  const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+  query.addEventListener("change", callback);
+  return () => query.removeEventListener("change", callback);
 }
 
-function Material({ highlighted, color, opacity = 1 }: { highlighted: boolean; color: string; opacity?: number }) {
-  return <meshPhysicalMaterial color={highlighted ? HIGHLIGHT : color} emissive={highlighted ? HIGHLIGHT : "#000000"} emissiveIntensity={highlighted ? 1.25 : 0} roughness={0.5} metalness={0.02} transparent opacity={highlighted ? 0.95 : opacity} depthWrite={highlighted} />;
+function subscribeVisibility(callback: () => void) {
+  document.addEventListener("visibilitychange", callback);
+  return () => document.removeEventListener("visibilitychange", callback);
 }
 
-function Pulse({ position, color = HIGHLIGHT, scale = 1 }: { position: [number, number, number]; color?: string; scale?: number }) {
-  const reference = useRef<THREE.Mesh>(null);
-  useFrame(({ clock }) => {
-    if (!reference.current) return;
-    const pulse = 1 + Math.sin(clock.elapsedTime * 3.2 + position[1]) * 0.16;
-    reference.current.scale.setScalar(scale * pulse);
-  });
-  return <mesh ref={reference} position={position}><sphereGeometry args={[0.09, 20, 20]} /><meshBasicMaterial color={color} transparent opacity={0.85} /></mesh>;
+function AtlasUnavailable() {
+  return <div role="status" className="atlas-message"><ScanLine className="mx-auto mb-3 size-8 text-teal-700" /><p className="font-semibold">3D view unavailable</p><p className="mt-2 text-xs leading-5">Your browser could not load the 3D atlas. The related systems and explanation below remain available.</p></div>;
 }
 
-function RealHumanShell() {
-  const { scene } = useGLTF("/models/bodyparts3d/human-skin.glb");
+class AtlasBoundary extends Component<{ children: ReactNode; onError: () => void }, { failed: boolean }> {
+  state = { failed: false };
 
-  useEffect(() => {
-    scene.traverse((object) => {
-      if (!(object instanceof THREE.Mesh)) return;
-      const materials = Array.isArray(object.material) ? object.material : [object.material];
-      materials.forEach((material) => {
-        material.transparent = true;
-        material.opacity = 0.3;
-        material.depthWrite = false;
-        material.side = THREE.DoubleSide;
-        material.color.set("#b97872");
-      });
-    });
-  }, [scene]);
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
 
-  return <primitive object={scene} position={[0, -0.08, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={0.00155} />;
-}
+  componentDidCatch(error: Error) {
+    console.error("The educational body atlas could not render.", error);
+    this.props.onError();
+  }
 
-useGLTF.preload("/models/bodyparts3d/human-skin.glb");
-
-function HumanFigure({ anatomy }: { anatomy: ResultAnatomy }) {
-  const group = useRef<THREE.Group>(null);
-  useFrame(({ clock }) => {
-    if (group.current) group.current.rotation.y = Math.sin(clock.elapsedTime * 0.35) * 0.12;
-  });
-  const regions = anatomy.regions;
-  const bloodActive = active(regions, "blood");
-  const marrowActive = active(regions, "bone-marrow");
-  const organActive = (region: BodyRegion) => active(regions, region);
-
-  return (
-    <Float speed={1.2} rotationIntensity={0.05} floatIntensity={0.12}>
-      <group ref={group} position={[0, -0.12, 0]}>
-        <RealHumanShell />
-
-        <group position={[0, 1.48, 0.18]}>
-          <mesh position={[0, 0.23, 0]}><sphereGeometry args={[0.2, 24, 16]} /><Material highlighted={organActive("brain")} color="#c77b9a" /></mesh>
-          <mesh position={[-0.18, -0.14, 0]} rotation={[0, 0, -0.18]}><capsuleGeometry args={[0.16, 0.48, 8, 16]} /><Material highlighted={organActive("blood")} color="#a94d63" /></mesh>
-          <mesh position={[0.18, -0.14, 0]} rotation={[0, 0, 0.18]}><capsuleGeometry args={[0.16, 0.48, 8, 16]} /><Material highlighted={organActive("blood")} color="#a94d63" /></mesh>
-          <mesh position={[0, -0.03, 0.11]}><sphereGeometry args={[0.07, 20, 16]} /><Material highlighted={bloodActive} color="#d64f57" /></mesh>
-          <mesh position={[0, -0.23, 0.02]} scale={[1.2, 0.7, 0.6]}><sphereGeometry args={[0.27, 24, 16]} /><Material highlighted={organActive("liver")} color="#9e493e" /></mesh>
-          <mesh position={[0.22, -0.25, 0.12]} rotation={[0, 0, -0.35]}><capsuleGeometry args={[0.07, 0.38, 8, 16]} /><Material highlighted={organActive("stomach")} color="#d28a78" /></mesh>
-          <mesh position={[0.02, -0.38, 0.16]} rotation={[0, 0, 0.08]}><capsuleGeometry args={[0.05, 0.4, 8, 16]} /><Material highlighted={organActive("pancreas")} color="#d9a044" /></mesh>
-          <mesh position={[-0.2, -0.35, 0.13]} scale={[0.62, 1, 0.45]}><sphereGeometry args={[0.1, 20, 16]} /><Material highlighted={organActive("kidneys")} color="#a9575e" /></mesh>
-          <mesh position={[0.2, -0.35, 0.13]} scale={[0.62, 1, 0.45]}><sphereGeometry args={[0.1, 20, 16]} /><Material highlighted={organActive("kidneys")} color="#a9575e" /></mesh>
-          <mesh position={[0, -0.6, 0.17]} scale={[0.65, 0.8, 0.55]}><torusGeometry args={[0.13, 0.045, 8, 24]} /><Material highlighted={organActive("urinary")} color="#cf9e54" /></mesh>
-          <mesh position={[0, -0.58, 0.18]} scale={[0.9, 0.58, 0.7]}><sphereGeometry args={[0.2, 24, 16]} /><Material highlighted={organActive("urinary")} color="#d69c63" opacity={0.8} /></mesh>
-        </group>
-
-        <group position={[0, 1.45, 0.32]}>
-          {[0.18, 0.02, -0.14, -0.3, -0.46].map((y) => <mesh key={y} position={[0, y, 0]} rotation={[0, 0, 0]}><torusGeometry args={[0.34 - Math.abs(y) * 0.12, 0.018, 8, 24, Math.PI]} /><meshStandardMaterial color={BONE} transparent opacity={0.48} /></mesh>)}
-          <mesh position={[0, -0.52, 0]}><capsuleGeometry args={[0.035, 1.15, 6, 12]} /><meshStandardMaterial color={BONE} transparent opacity={0.5} /></mesh>
-          <mesh position={[0, -0.72, 0]} scale={[1.15, 0.45, 0.55]}><torusGeometry args={[0.22, 0.035, 8, 24]} /><meshStandardMaterial color={BONE} transparent opacity={0.52} /></mesh>
-        </group>
-
-        {organActive("brain") && <Pulse position={[0, 2.35, 0.4]} color="#ef8fa6" />}
-        {organActive("thyroid") && <><mesh position={[-0.08, 1.88, 0.34]} scale={[0.8, 1.1, 0.6]}><sphereGeometry args={[0.08, 20, 16]} /><Material highlighted color="#e76f93" /></mesh><mesh position={[0.08, 1.88, 0.34]} scale={[0.8, 1.1, 0.6]}><sphereGeometry args={[0.08, 20, 16]} /><Material highlighted color="#e76f93" /></mesh></>}
-        {bloodActive && <Pulse position={[0, 1.53, 0.52]} color="#d94b52" scale={0.7} />}
-        {marrowActive && <>{[[-0.23,0.25,0.1],[0.23,0.25,0.1],[-0.66,1.3,0.1],[0.66,1.3,0.1]].map((position, index) => <Pulse key={index} position={position as [number, number, number]} color="#9f58a8" scale={0.5} />)}</>}
-      </group>
-    </Float>
-  );
+  render() {
+    return this.state.failed ? <AtlasUnavailable /> : this.props.children;
+  }
 }
 
 export function AnatomicalBody({ anatomy }: { anatomy: ResultAnatomy }) {
+  const container = useRef<HTMLDivElement>(null);
+  const [hasEntered, setHasEntered] = useState(false);
+  const [inView, setInView] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [rotation, setRotation] = useState(0);
+  const [resetVersion, setResetVersion] = useState(0);
+  const [ready, setReady] = useState(false);
+  const [contextLost, setContextLost] = useState(false);
+  const reducedMotion = useSyncExternalStore(subscribeMotion, () => window.matchMedia("(prefers-reduced-motion: reduce)").matches, () => true);
+  const pageVisible = useSyncExternalStore(subscribeVisibility, () => document.visibilityState === "visible", () => false);
+  const onReady = useCallback(() => setReady(true), []);
+  const onContextLost = useCallback(() => setContextLost(true), []);
+  const animate = !paused && !reducedMotion && pageVisible && inView;
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(([entry]) => {
+      setInView(entry.isIntersecting);
+      if (entry.isIntersecting) setHasEntered(true);
+    }, { rootMargin: "0px", threshold: 0.05 });
+    if (container.current) observer.observe(container.current);
+    return () => observer.disconnect();
+  }, []);
+
+  function resetView() {
+    setRotation(0);
+    setResetVersion((version) => version + 1);
+  }
+
   return (
-    <div className="min-w-0 w-full max-w-full overflow-hidden border-y border-[var(--line)] bg-[radial-gradient(circle_at_center,#d7ebe8_0%,#edf5f2_52%,var(--background)_100%)]">
-      <div className="relative h-[500px]">
-      <Canvas style={{ width: "100%", height: "100%", display: "block" }} camera={{ position: [0, 1.15, 6.6], fov: 31 }} dpr={[1, 1.75]} gl={{ antialias: true, alpha: true, preserveDrawingBuffer: true }}>
-        <ambientLight intensity={1.35} />
-        <directionalLight position={[3, 5, 4]} intensity={2.8} color="#fff8f4" />
-        <directionalLight position={[-3, 2, 2]} intensity={1.5} color="#75bcb5" />
-        <pointLight position={[0, 1.6, 2.2]} intensity={1.3} color="#f7c2a9" />
-        <HumanFigure anatomy={anatomy} />
-        <Environment preset="studio" />
-        <OrbitControls target={[0, 1.15, 0]} enablePan={false} enableZoom={false} minPolarAngle={Math.PI / 2.8} maxPolarAngle={Math.PI / 1.75} />
-      </Canvas>
-      <span className="pointer-events-none absolute left-3 top-3 border border-[var(--line)] bg-white/85 px-2 py-1 text-[10px] font-bold uppercase text-[var(--muted)] backdrop-blur">Drag to rotate</span>
+    <div className="body-atlas" role="region" aria-label="Educational body atlas">
+      <div className="flex items-center justify-between border-b border-[var(--line)] bg-white/80 px-4 py-3">
+        <div className="flex items-center gap-2"><ScanLine className="size-4 text-teal-700" /><span className="text-[11px] font-bold uppercase tracking-widest text-teal-800">Body atlas</span></div>
+        <span className="text-[10px] text-[var(--muted)]">{reducedMotion ? "Reduced motion" : animate ? "Live view" : "Motion paused"}</span>
       </div>
-      <div className="border-t border-[var(--line)] bg-white/75 px-4 py-4 text-center backdrop-blur-sm">
-        <p className="text-sm font-bold text-[var(--ink)]">{anatomy.label}</p>
-        <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-[var(--muted)]">{anatomy.explanation}</p>
+      <div ref={container} className="atlas-viewport" aria-label={`Illustrative body systems: ${anatomy.regions.map((region) => bodyRegions[region].label).join(", ") || "none selected"}`}>
+        <div aria-hidden="true" className="atlas-orbit atlas-orbit-outer" />
+        <div aria-hidden="true" className="atlas-orbit atlas-orbit-inner" />
+        <span className="pointer-events-none absolute start-4 top-4 text-[9px] font-semibold uppercase tracking-[0.2em] text-teal-800/65">Schematic / 3D</span>
+        <span className="pointer-events-none absolute bottom-4 end-4 text-[9px] uppercase tracking-widest text-[var(--muted)]">Illustrative, not diagnostic</span>
+        <AtlasBoundary onError={onContextLost}>
+          {contextLost ? <AtlasUnavailable /> : hasEntered ? <BodyScene anatomy={anatomy} animate={animate} rotation={rotation} resetVersion={resetVersion} onReady={onReady} onContextLost={onContextLost} /> : <p role="status" className="atlas-message">Body atlas loads when in view.</p>}
+        </AtlasBoundary>
+        {hasEntered && !ready && !contextLost && <p className="pointer-events-none absolute bottom-12 inset-x-4 text-center text-xs text-teal-800">Loading the local anatomy model...</p>}
+      </div>
+      <div className="flex items-center justify-between gap-2 border-y border-[var(--line)] bg-white/85 px-3 py-2">
+        <div className="flex gap-1">
+          <button type="button" className="atlas-control" aria-label="Rotate body left" onClick={() => setRotation((value) => value - Math.PI / 6)}><ArrowLeft className="size-4" /></button>
+          <button type="button" className="atlas-control" aria-label="Rotate body right" onClick={() => setRotation((value) => value + Math.PI / 6)}><ArrowRight className="size-4" /></button>
+          <button type="button" className="atlas-control" aria-label="Reset body view" onClick={resetView}><RotateCcw className="size-4" /></button>
+        </div>
+        <button type="button" className="atlas-control gap-2 px-3 text-xs" aria-pressed={paused || reducedMotion} aria-label={paused ? "Play body animation" : "Pause body animation"} disabled={reducedMotion} onClick={() => setPaused((value) => !value)}>{paused || reducedMotion ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}{reducedMotion ? "Motion reduced" : paused ? "Play" : "Pause"}</button>
+      </div>
+      <div className="bg-white/85 p-4">
+        <p className="font-display text-lg font-semibold text-[var(--ink)]">{anatomy.label}</p>
+        <p className="mt-2 text-xs leading-5 text-[var(--muted)]">{anatomy.explanation}</p>
+        <ul aria-label="Related body systems" className="mt-3 flex flex-wrap gap-1.5">{anatomy.regions.map((region) => <li key={region} className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-[10px] font-semibold text-teal-900"><span aria-hidden="true" className="me-1.5 inline-block size-2 rounded-full" style={{ backgroundColor: bodyRegions[region].color }} />{bodyRegions[region].label}</li>)}</ul>
+        <p className="mt-3 text-[10px] leading-4 text-[var(--muted)]">Natural-color schematic: red circulation, ivory bones, gold nerves. Related tissues brighten; other structures remain muted.</p>
+        <p className="mt-3 text-[10px] leading-4 text-[var(--muted)]">Drag to explore, or use the rotation buttons. Highlights show educational relationships, not affected or diseased organs. Motion is illustrative, never a measured heartbeat.</p>
+        <details className="mt-3 text-[10px] text-[var(--muted)]"><summary className="cursor-pointer">Anatomy model attribution</summary><p className="mt-1">Skin mesh: BodyParts3D, The Database Center for Life Science. <a className="underline" href="https://dbarchive.biosciencedbc.jp/en/bodyparts3d/download.html" target="_blank" rel="noreferrer">Source</a> · <a className="underline" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>. Display normalized and recolored; internal shapes are schematic.</p></details>
       </div>
     </div>
   );

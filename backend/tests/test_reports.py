@@ -1,3 +1,5 @@
+import json
+
 import pymupdf
 from fastapi.testclient import TestClient
 
@@ -111,7 +113,11 @@ def test_structure_returns_pending_results(monkeypatch) -> None:
     response = client.post(
         "/api/reports/structure",
         files={"file": ("sample.pdf", create_pdf(["Glucose 92 70 - 99 mg/dL"]), "application/pdf")},
-        data={"cloud_processing_allowed": "true"},
+        data={
+            "cloud_processing_allowed": "true",
+            "privacy_review_confirmed": "true",
+            "reviewed_pages": json.dumps([{"page_number": 1, "text": "Glucose 92 70 - 99 mg/dL"}]),
+        },
     )
 
     assert response.status_code == 200
@@ -119,6 +125,56 @@ def test_structure_returns_pending_results(monkeypatch) -> None:
     assert result["calculated_status"] == "normal"
     assert result["review_status"] == "pending"
     assert result["source_page"] == 1
+
+
+def test_structure_requires_privacy_review_before_provider_call(monkeypatch) -> None:
+    async def forbidden(*args):
+        raise AssertionError("Provider must not be called before privacy review")
+    monkeypatch.setattr("app.main.extract_structured_report", forbidden)
+    response = client.post(
+        "/api/reports/structure",
+        files={"file": ("sample.pdf", create_pdf(["Name: Synthetic Person\nGlucose 92"]), "application/pdf")},
+        data={"cloud_processing_allowed": "true"},
+    )
+    assert response.status_code == 400
+    assert "cloud text preview" in response.json()["detail"]
+
+
+def test_cloud_preview_strips_name_and_sends_only_reviewed_text(monkeypatch) -> None:
+    pdf = create_pdf(["Patient Name: Synthetic Person\nUnlabeled synthetic header\nGlucose 92"])
+    preview = client.post("/api/reports/extract", files={"file": ("synthetic-person.pdf", pdf, "application/pdf")}).json()
+    assert "Synthetic Person" in preview["pages"][0]["text"]
+    assert "Synthetic Person" not in preview["cloud_pages"][0]["text"]
+    assert preview["privacy_removed_lines"] == 1
+    captured = []
+    async def fake(filename, pages):
+        captured.extend(pages)
+        return StructuredReport(filename=filename, results=[])
+    monkeypatch.setattr("app.main.extract_structured_report", fake)
+    response = client.post(
+        "/api/reports/structure",
+        files={"file": ("synthetic-person.pdf", pdf, "application/pdf")},
+        data={"cloud_processing_allowed": "true", "privacy_review_confirmed": "true", "reviewed_pages": json.dumps([{"page_number": 1, "text": "Glucose 92"}])},
+    )
+    assert response.status_code == 200
+    assert captured[0].text == "Glucose 92"
+
+
+def test_cloud_preview_rejects_invented_text(monkeypatch) -> None:
+    async def forbidden(*args):
+        raise AssertionError("Provider must not be called for invalid previews")
+    monkeypatch.setattr("app.main.extract_structured_report", forbidden)
+    for pages in [
+        [{"page_number": 1, "text": "Glucose 95"}],
+        [{"page_number": 2, "text": "Glucose 92"}],
+        [{"page_number": 1, "text": ""}],
+    ]:
+        response = client.post(
+            "/api/reports/structure",
+            files={"file": ("sample.pdf", create_pdf(["Glucose 92"]), "application/pdf")},
+            data={"cloud_processing_allowed": "true", "privacy_review_confirmed": "true", "reviewed_pages": json.dumps(pages)},
+        )
+        assert response.status_code == 400
 
 
 def test_result_question_requires_confirmed_result() -> None:

@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { Bot, ExternalLink, FileCheck2, LoaderCircle, Maximize2, Minimize2, Send, ShieldAlert, X } from "lucide-react";
 
 import { askAboutReport, askRagAssistant } from "@/lib/api";
+import { RagVoiceControls } from "@/components/rag-voice-controls";
 import { languageDirection, translate } from "@/lib/ui-language";
 import type { ChatMessage, LabResult, Language, RagAnswer, RagSource, ReferenceLink, ReportAnswer } from "@/types/report";
 
@@ -43,8 +44,10 @@ export function ReportChatPanel({ results, language, onClose }: { results: LabRe
   });
   const [isAsking, setIsAsking] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const conversationEnd = useRef<HTMLDivElement>(null);
+  const [voiceListening, setVoiceListening] = useState(false);
+  const conversation = useRef<HTMLDivElement>(null);
   const activeState = assistantStates[assistantMode];
+  const latestAnswer = [...activeState.messages].reverse().find((message) => message.role === "assistant")?.content;
 
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
@@ -55,7 +58,8 @@ export function ReportChatPanel({ results, language, onClose }: { results: LabRe
   }, [onClose]);
 
   useEffect(() => {
-    if (activeState.messages.length > 0) conversationEnd.current?.scrollIntoView({ behavior: "smooth" });
+    const element = conversation.current;
+    if (element && activeState.messages.length > 0) element.scrollTo({ top: element.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
   }, [activeState.messages]);
 
   function evidenceFor(answer: ReportAnswer) {
@@ -89,7 +93,7 @@ export function ReportChatPanel({ results, language, onClose }: { results: LabRe
     event?.preventDefault();
     const mode = assistantMode;
     const nextQuestion = (suggestedQuestion ?? questions[mode]).trim();
-    if (!nextQuestion || isAsking) return;
+    if (!nextQuestion || isAsking || voiceListening) return;
     const history = assistantStates[mode].messages.map(({ role, content }) => ({ role, content }));
     updateAssistantState(mode, {
       messages: [...assistantStates[mode].messages, { role: "user", content: nextQuestion }],
@@ -124,24 +128,25 @@ export function ReportChatPanel({ results, language, onClose }: { results: LabRe
 
   return (
     <div className={`fixed inset-0 z-50 flex justify-end ${isFullscreen ? "bg-[var(--background)]" : "pointer-events-none bg-transparent"}`} role="presentation">
-      <aside dir={languageDirection(language)} role="dialog" aria-modal="false" aria-labelledby="report-chat-title" style={isFullscreen ? { width: "100vw", height: "100vh" } : undefined} className={`pointer-events-auto flex flex-col border border-[var(--line)] bg-[var(--background)] shadow-2xl transition-all ${isFullscreen ? "h-full w-full" : "absolute bottom-4 right-4 h-[min(680px,calc(100vh-2rem))] w-[min(440px,calc(100vw-2rem))]"}`}>
-        <header className="flex items-center justify-between border-b border-[var(--line)] bg-white/95 px-5 py-4 backdrop-blur">
-          <div className="flex items-center gap-3"><span className="grid size-10 place-items-center bg-[var(--ink)] text-white"><Bot className="size-5" /></span><div><p className="text-xs font-bold uppercase text-[var(--teal)]">{assistantMode === "report" ? translate(language, "reportAssistant") : "RAG assistant"}</p><h2 id="report-chat-title" className="font-display text-2xl font-semibold text-[var(--ink)]">{translate(language, "askClarity")}</h2></div></div>
+      <aside dir={languageDirection(language)} role="dialog" aria-modal="false" aria-labelledby="report-chat-title" className={`report-chat pointer-events-auto flex min-h-0 min-w-0 flex-col overflow-hidden border border-[var(--line)] bg-[var(--background)] shadow-2xl ${isFullscreen ? "h-dvh w-full" : "absolute bottom-2 end-2 h-[min(760px,calc(100dvh-1rem))] w-[min(460px,calc(100%_-_1rem))] rounded-2xl sm:bottom-4 sm:end-4 sm:h-[min(760px,calc(100dvh-2rem))] sm:w-[min(460px,calc(100%_-_2rem))]"}`}>
+        <header className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] bg-white px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[var(--ink)] text-white"><Bot className="size-5" /></span><div className="min-w-0"><p className="truncate text-[10px] font-bold uppercase tracking-wide text-[var(--teal)]">{assistantMode === "report" ? translate(language, "reportAssistant") : "RAG assistant"}</p><h2 id="report-chat-title" className="font-display text-xl font-semibold text-[var(--ink)]">{translate(language, "askClarity")}</h2></div></div>
           <div className="flex gap-1"><button type="button" onClick={() => setIsFullscreen((current) => !current)} title={isFullscreen ? "Restore chat size" : "Open chat full screen"} className="grid size-10 place-items-center border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50">{isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}<span className="sr-only">{isFullscreen ? "Restore chat size" : "Open chat full screen"}</span></button><button type="button" onClick={onClose} title="Close report assistant" className="grid size-10 place-items-center border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"><X className="size-5" /><span className="sr-only">Close report assistant</span></button></div>
         </header>
 
-        <div className="border-b border-[var(--line)] bg-white px-5 py-3">
-          <div className="mb-3 grid grid-cols-2 border border-zinc-300 p-1" role="group" aria-label="Choose chatbot">
-            <button type="button" aria-pressed={assistantMode === "report"} onClick={() => setAssistantMode("report")} className={`px-3 py-2 text-xs font-semibold ${assistantMode === "report" ? "bg-[var(--ink)] text-white" : "text-zinc-600 hover:bg-zinc-100"}`}>My report assistant</button>
-            <button type="button" aria-pressed={assistantMode === "rag"} onClick={() => setAssistantMode("rag")} className={`px-3 py-2 text-xs font-semibold ${assistantMode === "rag" ? "bg-teal-700 text-white" : "text-zinc-600 hover:bg-zinc-100"}`}>RAG assistant</button>
+        <div className="shrink-0 border-b border-[var(--line)] bg-white px-4 py-2">
+          <div className="mb-2 grid grid-cols-2 gap-1 rounded-xl bg-zinc-100 p-1" role="group" aria-label="Choose chatbot">
+            <button type="button" disabled={isAsking} aria-pressed={assistantMode === "report"} onClick={() => setAssistantMode("report")} className={`rounded-lg px-2 py-2 text-xs font-semibold disabled:opacity-60 ${assistantMode === "report" ? "bg-[var(--ink)] text-white" : "text-zinc-600 hover:bg-zinc-200"}`}>My report</button>
+            <button type="button" disabled={isAsking} aria-pressed={assistantMode === "rag"} onClick={() => setAssistantMode("rag")} className={`rounded-lg px-2 py-2 text-xs font-semibold disabled:opacity-60 ${assistantMode === "rag" ? "bg-teal-700 text-white" : "text-zinc-600 hover:bg-zinc-200"}`}>Research / RAG</button>
           </div>
-          <div className="flex items-center gap-2 text-xs text-zinc-600"><FileCheck2 className="size-4 text-teal-700" /><strong>{results.length} {translate(language, "confirmedResults")}</strong><span>·</span><span>{outsideRange} {translate(language, "outsideListed")}</span></div>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-zinc-600"><FileCheck2 className="size-3.5 shrink-0 text-teal-700" /><strong>{results.length} {translate(language, "confirmedResults")}</strong><span>· {outsideRange} {translate(language, "outsideListed")}</span></div>
         </div>
 
-        <div aria-live="polite" className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
+        <div ref={conversation} aria-label="Conversation" aria-live="polite" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 [scrollbar-gutter:stable]">
+          <div className="mx-auto max-w-3xl space-y-4">
           {activeState.messages.length === 0 && <div className="border border-dashed border-zinc-300 bg-white px-4 py-5"><p className="text-sm leading-6 text-zinc-700">{translate(language, "reportIntro")}</p></div>}
           {activeState.messages.map((message, index) => (
-            <div key={`${message.role}-${index}`} className={message.role === "user" ? "ml-auto max-w-[90%] bg-[var(--ink)] px-4 py-3 text-sm leading-6 text-white" : "max-w-[95%] border border-zinc-200 bg-white px-4 py-3 text-sm leading-6 text-zinc-700"}>
+            <div key={`${message.role}-${index}`} className={`w-fit max-w-[95%] rounded-2xl px-4 py-3 text-sm leading-6 [overflow-wrap:anywhere] ${message.role === "user" ? "ms-auto rounded-se-sm bg-[var(--ink)] text-white" : "rounded-ss-sm border border-zinc-200 bg-white text-zinc-700"}`}>
               <p className="whitespace-pre-wrap">{message.content}</p>
               {message.citedResultNames && message.citedResultNames.length > 0 && <div className="mt-3 flex flex-wrap gap-1 border-t border-zinc-100 pt-3">{message.citedResultNames.map((citation) => <span key={citation} className="bg-teal-50 px-2 py-1 text-[11px] font-semibold text-teal-800">{citation}</span>)}</div>}
               {message.references && message.references.length > 0 && <div className="mt-3 space-y-1">{message.references.map((reference) => <a key={reference.url} href={reference.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs font-semibold text-teal-700 hover:underline"><ExternalLink className="size-3" />{reference.source}: {reference.title}</a>)}</div>}
@@ -149,14 +154,16 @@ export function ReportChatPanel({ results, language, onClose }: { results: LabRe
             </div>
           ))}
           {isAsking && <div className="inline-flex items-center gap-2 border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-500"><LoaderCircle className="size-4 animate-spin" />Reviewing confirmed results…</div>}
-          <div ref={conversationEnd} />
+          {!isAsking && activeState.suggestions.length > 0 && <details open={activeState.messages.length === 0} className="rounded-xl border border-[var(--line)] bg-white p-3"><summary className="cursor-pointer text-xs font-semibold text-teal-800">Suggested questions</summary><div className="mt-3 grid gap-2">{activeState.suggestions.map((suggestion) => <button key={suggestion} type="button" onClick={() => void submitQuestion(undefined, suggestion)} className="rounded-lg border border-zinc-200 px-3 py-2 text-start text-xs leading-5 text-zinc-700 hover:border-teal-700 [overflow-wrap:anywhere]">{suggestion}</button>)}</div></details>}
+          <details className="text-xs leading-5 text-zinc-500"><summary className="cursor-pointer">Educational limits</summary><p className="mt-2 [overflow-wrap:anywhere]">{activeState.safetyNote}</p></details>
+          {activeState.error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 [overflow-wrap:anywhere]">{activeState.error}</p>}
+          {assistantMode === "rag" && <RagVoiceControls key={language} language={language} draft={questions.rag} onDraftChange={(text) => setQuestions((current) => ({ ...current, rag: text }))} answer={latestAnswer ? `${latestAnswer}\n${activeState.safetyNote}` : ""} busy={isAsking} onListeningChange={setVoiceListening} />}
+          </div>
         </div>
 
-        <div className="border-t border-[var(--line)] bg-white p-5">
-          {activeState.error && <p role="alert" className="mb-3 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{activeState.error}</p>}
-          <div className="mb-3 flex flex-wrap gap-2">{activeState.suggestions.map((suggestion) => <button key={suggestion} type="button" onClick={() => void submitQuestion(undefined, suggestion)} className="border border-zinc-300 px-3 py-2 text-left text-xs font-semibold text-zinc-700 hover:border-teal-700">{suggestion}</button>)}</div>
-          <form onSubmit={(event) => void submitQuestion(event)} className="flex gap-2"><label htmlFor="report-question" className="sr-only">Ask about your confirmed report</label><textarea id="report-question" value={questions[assistantMode]} onChange={(event) => setQuestions((current) => ({ ...current, [assistantMode]: event.target.value }))} placeholder="Ask about patterns, individual values, or what to discuss with a clinician…" rows={3} maxLength={1000} className="min-h-20 flex-1 resize-none border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-teal-700" /><button type="submit" disabled={!questions[assistantMode].trim() || isAsking} title="Send report question" className="grid w-12 place-items-center bg-[var(--ink)] text-white hover:bg-teal-700 disabled:opacity-40"><Send className="size-4" /><span className="sr-only">Send report question</span></button></form>
-          <p className="mt-3 flex items-start gap-2 text-xs leading-5 text-zinc-500"><ShieldAlert className="mt-0.5 size-3.5 shrink-0" />{activeState.safetyNote}</p>
+        <div className="shrink-0 border-t border-[var(--line)] bg-white p-3">
+          <form onSubmit={(event) => void submitQuestion(event)} className="mx-auto flex max-w-3xl items-end gap-2"><label htmlFor="report-question" className="sr-only">Ask about your confirmed report</label><textarea id="report-question" value={questions[assistantMode]} disabled={voiceListening} onChange={(event) => setQuestions((current) => ({ ...current, [assistantMode]: event.target.value }))} placeholder="Ask about your confirmed results…" rows={2} maxLength={1000} className="min-h-16 min-w-0 flex-1 resize-none rounded-xl border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-teal-700 disabled:bg-zinc-50" /><button type="submit" disabled={!questions[assistantMode].trim() || isAsking || voiceListening} title="Send report question" className="grid size-11 shrink-0 place-items-center rounded-xl bg-[var(--ink)] text-white hover:bg-teal-700 disabled:opacity-40"><Send className="size-4" /><span className="sr-only">Send report question</span></button></form>
+          <p className="mt-2 flex items-center justify-center gap-1.5 text-[10px] text-zinc-500"><ShieldAlert className="size-3 shrink-0" />Education only. Not a diagnosis or treatment advice.</p>
         </div>
       </aside>
     </div>
